@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ATtiny85 Assembler · ensamblador AVR web</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232ba6ff'/%3E%3Ctext x='16' y='22' font-family='sans-serif' font-size='15' font-weight='bold' text-anchor='middle' fill='%230a1622'%3EA8%3C/text%3E%3C/svg%3E">
+  <meta name="description" content="Ensamblador AVR para ATtiny85 que funciona completamente en el navegador.">
+  <link rel="stylesheet" href="../theme.css">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <a href="../" class="brand-link" aria-label="Volver al inicio">A8</a>
+      <div><strong>ATtiny85 Assembler</strong><small>AVR · 100% navegador</small></div>
+    </div>
+    <nav>
+      <a href="../">Inicio</a>
+      <a href="../editor/">Editor C/C++</a>
+      <a href="../flasher/">Flasher WebUSB</a>
+      <a href="https://paypal.me/rdvt?locale.x=es_XC&country.x=MX" target="_blank" rel="noreferrer noopener">♡ Donar</a>
+    </nav>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">ENSAMBLADOR AVR SIN INSTALACIÓN</p>
+        <h1>Escribe instrucciones. Genera firmware.</h1>
+        <p class="lede">Parser de dos pasadas para ATtiny85: resuelve etiquetas, codifica instrucciones AVR, genera Intel HEX y binario crudo sin agente local, WebAssembly ni conexión a internet.</p>
+      </div>
+      <div class="hero-stats"><div><b>8 KB</b><span>flash total</span></div><div><b>6012 B</b><span>Digispark útil</span></div><div><b>0</b><span>dependencias</span></div></div>
+    </section>
+
+    <div class="toolbar card">
+      <label>Objetivo
+        <select id="target"><option value="attiny85">ATtiny85 · flash completa</option><option value="digispark">Digispark · bootloader micronucleus</option></select>
+      </label>
+      <button id="assemble" class="primary">Ensamblar <kbd>Ctrl</kbd><kbd>Enter</kbd></button>
+      <button id="example">Cargar ejemplo</button>
+      <button id="clear">Limpiar</button>
+      <span class="spacer"></span>
+      <button id="download-hex" disabled>Descargar .hex</button>
+      <button id="download-bin" disabled>Descargar .bin</button>
+    </div>
+
+    <div class="workspace">
+      <section class="card editor-card">
+        <div class="section-head"><div><h2>Fuente AVR</h2><span id="source-meta">0 líneas</span></div><span id="status" class="status idle">Listo para ensamblar</span></div>
+        <div class="code-wrap">
+          <pre id="lines" aria-hidden="true">1</pre>
+          <textarea id="source" spellcheck="false" wrap="off" aria-label="Código ensamblador AVR"></textarea>
+        </div>
+        <div class="editor-foot"><span>Comentarios con <code>;</code> · números: decimal, <code>0x</code>, <code>$</code>, <code>0b</code></span><span id="cursor">Línea 1 · Columna 1</span></div>
+      </section>
+
+      <aside class="side">
+        <section class="card result-card">
+          <div class="section-head"><h2>Resultado</h2><span id="size">—</span></div>
+          <div class="meter"><div id="meter-fill"></div></div>
+          <div class="result-grid"><div><span>Bytes usados</span><b id="used">—</b></div><div><span>Final</span><b id="end">—</b></div><div><span>Símbolos</span><b id="symbols">—</b></div><div><span>Formato</span><b>Intel HEX</b></div></div>
+          <details><summary>Ver símbolos</summary><pre id="symbol-list">Ensamblá para ver etiquetas.</pre></details>
+        </section>
+        <section class="card diagnostics-card">
+          <div class="section-head"><h2>Diagnóstico</h2><span id="diagnostic-count">0</span></div>
+          <div id="diagnostics" class="diagnostics"><p class="muted">Los errores aparecen aquí con línea y columna.</p></div>
+        </section>
+        <section class="card hex-card">
+          <div class="section-head"><h2>Intel HEX</h2><button id="copy-hex" class="small" disabled>Copiar</button></div>
+          <pre id="hex-output">Ensamblá el programa para generar Intel HEX.</pre>
+        </section>
+      </aside>
+    </div>
+
+    <section class="card tutorial">
+      <div class="section-head"><div><p class="eyebrow">TUTORIAL</p><h2>Cómo usarlo, paso a paso</h2></div></div>
+      <div class="tutorial-grid">
+        <details open><summary><span>01</span> Escribe un programa mínimo</summary><div><p>El ATtiny85 empieza a ejecutar en la dirección 0. Este programa configura el pin P0 como salida, lo enciende y se queda en un bucle:</p><pre><code>.device attiny85
+.equ DDRB = 0x17
+.equ PORTB = 0x18
+
+.org 0
+rjmp reset
+
+reset:
+    ldi r16, 0x01
+    out DDRB, r16
+loop:
+    out PORTB, r16
+    rjmp loop</code></pre><p class="muted">En la Digispark el bootloader micronucleus ya deja el puntero de pila listo, así que no hace falta inicializarlo. Si programas el micro sin bootloader, tendrás que configurar <code>SPL</code> antes de usar llamadas o interrupciones.</p></div></details>
+        <details><summary><span>02</span> Entendé las direcciones</summary><div><p>Las etiquetas y <code>.org</code> usan direcciones de <strong>bytes</strong>. Las instrucciones AVR ocupan 2 bytes, salvo <code>JMP</code>, <code>CALL</code>, <code>LDS</code> y <code>STS</code>, que ocupan 4. Los saltos relativos se calculan automáticamente.</p><p>Ejemplo: <code>rjmp loop</code> busca <code>loop:</code> en la segunda pasada y valida que entre en el rango de ±2048 palabras.</p></div></details>
+        <details><summary><span>03</span> Usa directivas y datos</summary><div><p>Se admiten <code>.org</code>, <code>.byte/.db</code>, <code>.word/.dw</code>, <code>.dword/.long</code>, <code>.ascii</code>, <code>.asciz/.string</code>, <code>.fill</code>, <code>.align</code>, <code>.equ/.set</code> y <code>.def</code>.</p><pre><code>.equ VALUE = 0x1234
+; También: .equ VALUE, 0x1234
+.db 1, 2, 0xff, 'A'
+.dw VALUE
+.asciz "hola"
+.fill 4, 1, 0xff</code></pre><p>Las expresiones aceptan <code>+ - * / % &lt;&lt; &gt;&gt; &amp; | ^ ~</code>, paréntesis y funciones <code>low()</code>, <code>high()</code>, <code>byte1()</code>…</p></div></details>
+        <details><summary><span>04</span> Graba en la Digispark</summary><div><p>Elige el objetivo <strong>Digispark</strong> para limitar a 6012 bytes. Descarga el HEX y abre el <a href="../flasher/">Flasher WebUSB</a>. El flasher verificará el vector inicial y parcheará el salto del bootloader.</p><ol><li>Ensambla y revisa que no haya errores.</li><li>Descarga el <code>.hex</code>.</li><li>Pulsa Grabar en el flasher.</li><li>Desconecta y conecta la placa con el selector abierto.</li><li>Elige <code>16D0:0753</code> y no desconectes durante la escritura.</li></ol></div></details>
+      </div>
+    </section>
+
+    <section class="card reference">
+      <div class="section-head"><h2>Referencia rápida</h2><span class="muted">subconjunto AVR implementado</span></div>
+      <div class="instruction-grid"><code>LDI · SER · MOV · MOVW</code><code>ADD · ADC · SUB · SBC</code><code>AND · OR · EOR · CP · CPC</code><code>INC · DEC · COM · NEG</code><code>RJMP · RCALL · JMP · CALL</code><code>BREQ · BRNE · BRCC · BRCS</code><code>IN · OUT · SBI · CBI</code><code>LD · ST · LDD · STD · LPM</code><code>PUSH · POP · RET · RETI</code><code>SEC · CLC · SEI · CLI · BSET</code></div>
+      <p class="muted note">Solo se admiten las instrucciones de la lista. Cualquier otra se rechaza con un error de diagnóstico en lugar de generar una palabra incorrecta.</p>
+    </section>
+  </main>
+
+  <footer style="border-top: 1px solid var(--line); padding: 1.1rem max(1.2rem, calc((100vw - 1280px) / 2)); display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: center; color: var(--muted); font-size: 13px">
+    <span style="flex: 1">ATtiny85 Assembler · 100% navegador</span>
+    <a href="../" style="color: var(--muted)">Inicio</a>
+    <a href="../manual.html" style="color: var(--muted)">Manual</a>
+    <a href="https://valedam.lat/" target="_blank" rel="noreferrer noopener" style="color: var(--muted)">valedam.lat</a>
+    <a href="https://paypal.me/rdvt?locale.x=es_XC&country.x=MX" target="_blank" rel="noreferrer noopener" style="color: var(--muted)">♡ Donar</a>
+  </footer>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+==> Compilando DigisparkMouse (digistump:avr:digispark-tiny)
+El Sketch usa 2960 bytes (49%) del espacio de almacenamiento de programa. El máximo es 6012 bytes.
+Variables globales usan 93 bytes de memoria dinamica.
+
+==> Enchufá el Digispark en el USB ahora.
+    El bootloader sólo escucha unos segundos DESDE que lo enchufás, así que
+    conectalo después de este mensaje. Si no lo agarra a la primera,
+    desenchufalo y repetí: micronucleus espera hasta 240s.
+

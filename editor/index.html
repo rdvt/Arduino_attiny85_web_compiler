@@ -1,0 +1,1569 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Banco de trabajo ATtiny85 · editor + compilador + flasher</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232ba6ff'/%3E%3Ctext x='16' y='22' font-family='sans-serif' font-size='15' font-weight='bold' text-anchor='middle' fill='%230a1622'%3EA8%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="../theme.css">
+    <style>
+      /* El sistema de diseño vive en `theme.css` (design.md §3). Aquí sólo se
+         mapean los nombres propios de esta página a los tokens compartidos;
+         `--bg`, `--line`, `--text`, `--warn` y `--info` vienen de theme.css. */
+      :root {
+        color-scheme: dark;
+        --panel: var(--surface);
+        --panel-2: var(--surface-2);
+        --muted: var(--text-3);
+        --muted-2: #6b6b74; /* gris neutro para números de línea y ayudas */
+        --accent: var(--brand);
+        --accent-ink: var(--brand-ink);
+        --error: var(--danger);
+        --mono: var(--font-mono);
+      }
+
+      /* Compatibilidad: esta página ya define sus propios controles y paneles,
+         así que se anulan los estilos base de elementos de theme.css. */
+      input[type="text"], input[type="search"], select { width: auto; }
+      .card { display: block; }
+      .field { margin-bottom: 0; }
+      .editor > textarea:focus-visible { box-shadow: none; outline: none; }
+
+      * { box-sizing: border-box; }
+
+      body.app-editor {
+        margin: 0;
+        padding: 1rem;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.5 var(--font-sans);
+      }
+
+      h1 { font-family: var(--font-display); font-size: 1.15rem; margin: 0; letter-spacing: -0.01em; }
+      h2 { font-size: 0.78rem; margin: 0 0 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+      p { margin: 0 0 0.5rem; }
+      code, pre, .mono { font-family: var(--mono); }
+
+      header.bar {
+        display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+        position: sticky; top: 0; z-index: var(--z-sticky);
+        padding: 0.7rem 0 0.9rem; margin-bottom: 0.9rem;
+        background: rgba(23, 23, 25, .82);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--line);
+      }
+      header.bar .grow { flex: 1 1 auto; }
+
+      button, select, input[type="number"], input[type="text"] {
+        font: inherit; color: var(--text); background: var(--panel-2);
+        border: 1px solid var(--line); border-radius: var(--r-md); padding: 0.45rem 0.7rem;
+      }
+      button { font-weight: 600; cursor: pointer; }
+      button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-3); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+      button.primary:hover:not(:disabled) { background: var(--brand-hover); }
+      button.ghost { background: none; border-color: transparent; color: var(--muted); font-weight: 400; padding: 0.3rem 0.4rem; }
+      button.ghost:hover:not(:disabled) { color: var(--text); background: var(--panel-2); }
+      input[type="number"] { width: 6.5rem; }
+      input[type="file"] { color: var(--muted); font-size: 0.85rem; max-width: 100%; }
+
+      .chip {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        font-size: 0.78rem; padding: 0.3rem 0.6rem; border-radius: 999px;
+        border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+      }
+      .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-2); box-shadow: 0 0 0 2px #0008; }
+      .chip.ok .dot { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+      .chip.bad .dot { background: var(--error); }
+      .chip.warn .dot { background: var(--warn); }
+
+      .layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 0.9rem; align-items: start; }
+      @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+      .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 0.9rem; margin-bottom: 0.9rem; }
+      .card.tight { padding: 0.7rem 0.9rem; }
+
+      .tabs { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.6rem; align-items: center; }
+      .tab {
+        display: inline-flex; align-items: center; gap: 0.35rem;
+        font: 0.82rem var(--mono); padding: 0.25rem 0.5rem; border-radius: 8px;
+        border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); cursor: pointer;
+      }
+      .tab.active { color: var(--text); border-color: var(--line-strong); background: var(--surface-3); }
+      .tab .dirty { color: var(--accent); }
+
+      .code { display: flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #0b0d12; height: 62vh; min-height: 300px; }
+      .gutter { overflow: hidden; padding: 0.7rem 0.55rem 0.7rem 0.7rem; background: #0a0c10; border-right: 1px solid var(--line); user-select: none; }
+      .gutter pre { margin: 0; font: 13px/1.55 var(--mono); color: var(--muted-2); text-align: right; }
+      .editor { position: relative; flex: 1 1 auto; overflow: hidden; }
+      .editor > pre, .editor > textarea { position: absolute; inset: 0; margin: 0; padding: 0.7rem; font: 13px/1.55 var(--mono); white-space: pre; overflow: auto; }
+      .editor > pre { pointer-events: none; }
+      .editor > textarea { background: transparent; color: transparent; caret-color: var(--text); border: 0; outline: none; resize: none; }
+      .editor > textarea::selection { background: #2f4a63; }
+      .t-cmt { color: var(--text-3); font-style: italic; }
+      .t-str { color: var(--ok); }
+      .t-pre { color: #c58fe0; }
+      .t-kw { color: var(--brand); }
+      .t-num { color: var(--warn); }
+
+      .kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.8rem; font-size: 0.86rem; margin: 0; }
+      .kv dt { color: var(--muted); }
+      .kv dd { margin: 0; }
+
+      .progress { height: 9px; border-radius: var(--r-full); background: var(--surface-3); border: 1px solid var(--line); overflow: hidden; margin: 0.55rem 0 0.35rem; }
+      .progress > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--brand-hover), var(--accent)); transition: width 0.2s; }
+      .progress.over > div { background: linear-gradient(90deg, #ff7a6b, #ff9f6b); }
+
+      .compilando { margin: 0.55rem 0 0.35rem; }
+      .compilando-fila { display: flex; align-items: baseline; gap: 0.5rem; font-size: 0.82rem; }
+      .compilando-fila span:first-child { flex: 1; color: var(--muted); }
+      .compilando-fila .pct { font-variant-numeric: tabular-nums; color: var(--accent); }
+      .compilando .progress { margin: 0.3rem 0 0; }
+      .compilando.listo .compilando-fila .pct { color: #6ee7a8; }
+      .compilando.listo .progress > div { background: linear-gradient(90deg, #2fa363, #6ee7a8); }
+      .compilando.error .compilando-fila .pct { color: var(--error); }
+      .compilando.error .progress > div { background: linear-gradient(90deg, #ff7a6b, #ff9f6b); transition: none; }
+
+      .findings { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; }
+      .findings li { display: flex; gap: 0.45rem; padding: 0.35rem 0; border-top: 1px solid var(--line); }
+      .findings li:first-child { border-top: 0; }
+      .findings .tag { flex: 0 0 auto; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 0.15rem; }
+      .findings .error .tag { color: var(--error); }
+      .findings .warn .tag { color: var(--warn); }
+      .findings .info .tag { color: var(--info); }
+      .findings .goto { background: none; border: 0; color: inherit; font: inherit; text-align: left; padding: 0; cursor: pointer; }
+      .findings .goto:hover { text-decoration: underline; }
+
+      .fields { display: grid; gap: 0.55rem; }
+      .field { display: grid; grid-template-columns: 1fr auto; gap: 0.3rem 0.5rem; align-items: center; }
+      .field label { font-size: 0.86rem; }
+      .field .help { grid-column: 1 / -1; font-size: 0.76rem; color: var(--muted-2); }
+      .field .bad { color: var(--error); }
+
+      canvas { width: 100%; max-width: 320px; background: #101013; border: 1px solid var(--line); border-radius: var(--r-md); }
+
+      #salida {
+        margin: 0.5rem 0 0; padding: 0.7rem; max-height: 13rem; overflow: auto;
+        background: #101013; border: 1px solid var(--line); border-radius: var(--r-md);
+        font-size: 0.8rem; line-height: 1.5; color: var(--text-2); white-space: pre-wrap; word-break: break-word;
+      }
+
+      .note { font-size: 0.84rem; color: var(--muted); }
+      .note.warn { color: var(--warn); }
+      .note.error { color: var(--error); }
+      .note.ok { color: var(--accent); }
+      kbd { font: 0.75rem var(--mono); padding: 0.12rem 0.3rem; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; color: var(--text); background: var(--panel-2); }
+      details summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
+      details > *:not(summary) { margin-top: 0.55rem; }
+      a { color: var(--accent); }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 1rem;
+        align-items: center;
+        padding: 1rem 1.1rem;
+        margin-bottom: 0.9rem;
+        background: linear-gradient(135deg, #1b2530, #171a21 60%);
+        border: 1px solid #334252;
+        border-radius: 14px;
+      }
+      .hero h2 { margin: 0 0 0.25rem; color: var(--text); text-transform: none; letter-spacing: -0.01em; font-size: 1.05rem; }
+      .hero p { margin: 0; color: var(--muted); max-width: 70ch; }
+      .hero .steps { display: flex; gap: 0.45rem; flex-wrap: wrap; justify-content: flex-end; }
+      .step {
+        display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 50%;
+        color: var(--accent-ink); background: var(--accent); font-weight: 800;
+      }
+      .step-label { font-size: 0.72rem; color: var(--muted); text-align: center; }
+      .tutorial-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
+      .tutorial-grid details { padding: 0.65rem 0.75rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+      .tutorial-grid summary { color: var(--text); font-weight: 650; }
+      .tutorial-grid ol, .tutorial-grid ul { margin: 0.55rem 0 0; padding-left: 1.15rem; color: var(--muted); font-size: 0.82rem; }
+      .tutorial-grid li { margin-bottom: 0.3rem; }
+      .wasm-status { padding: 0.65rem 0.75rem; border-left: 3px solid var(--warn); background: #211e17; color: var(--muted); font-size: 0.82rem; }
+      .wasm-status strong { color: var(--warn); }
+      .wasm-status.ok { border-left-color: var(--accent); background: #101d2b; }
+      .wasm-status.ok strong { color: var(--accent); }
+
+      /* El mapa de pines 3D es un componente compartido: sus estilos viven
+         en theme.css (.pinmap3d), igual que site-header o brand. */
+      @media (max-width: 650px) {
+        .hero { grid-template-columns: 1fr; }
+        .hero .steps { justify-content: flex-start; }
+        .tutorial-grid { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body class="app-editor">
+    <header class="bar">
+      <div class="grow">
+        <h1>Banco de trabajo ATtiny85</h1>
+        <span class="note">Editor C/C++ + compilador WebAssembly ATtiny85 + flasher WebUSB</span>
+      </div>
+      <a href="../" class="note">Inicio</a>
+      <a href="../flasher/" class="note" target="_blank" rel="noreferrer">Flasher WebUSB</a>
+      <a href="../manual.html" class="note" target="_blank" rel="noreferrer">Manual</a>
+      <a href="https://paypal.me/rdvt?locale.x=es_XC&country.x=MX" target="_blank" rel="noreferrer noopener" class="note">♡ Donar</a>
+      <span class="chip" id="agente-chip"><span class="dot"></span><span id="agente-texto">Iniciando compilador…</span></span>
+      <select id="placa" title="Placa (FQBN)"></select>
+      <button id="btn-compilar" class="primary">Compilar <span class="note mono">Ctrl+⏎</span></button>
+      <button id="btn-guardar">Guardar</button>
+      <button id="btn-grabar">Grabar compilado</button>
+    </header>
+
+    <section class="hero" aria-labelledby="workflow-title">
+      <div>
+        <h2 id="workflow-title">Flujo guiado: edita, compila y graba</h2>
+        <p>El editor trae el compilador ATtiny85 dentro de la propia página: compila en tu navegador sin instalar toolchain ni arrancar ningún servicio.</p>
+      </div>
+      <div class="steps" aria-label="Pasos del flujo">
+        <div><span class="step">1</span><div class="step-label">Editar</div></div>
+        <div><span class="step">2</span><div class="step-label">Validar</div></div>
+        <div><span class="step">3</span><div class="step-label">Compilar</div></div>
+        <div><span class="step">4</span><div class="step-label">Grabar</div></div>
+      </div>
+    </section>
+
+    <section class="integration" aria-labelledby="integracion-titulo">
+      <div class="integration__visual" data-toolchain-hub></div>
+      <div class="integration__body">
+        <p class="label label--brand">Integración</p>
+        <h2 id="integracion-titulo">Del editor al chip, sin piezas sueltas</h2>
+        <p>
+          El compilador WebAssembly de esta página corre <strong>cc1plus</strong>, <strong>avr-as</strong>,
+          <strong>avr-ld</strong> y <strong>avr-objcopy</strong> dentro del navegador.
+          El <strong>agente local</strong> hace lo mismo con <span class="mono">arduino-cli</span> y el core
+          <span class="mono">digistump:avr</span> de tu máquina. Las dos rutas producen el mismo Intel HEX,
+          y ese HEX entra por <strong>WebUSB</strong> con el bootloader micronucleus.
+        </p>
+        <p class="integration__pie">ATtiny85 @ 16.5 MHz · 6012 B de usuario · página de 64 B · 94 páginas</p>
+        <p class="integration__acciones">
+          <a class="btn btn--secondary btn--sm" href="../manual.html">Leer el manual</a>
+        </p>
+      </div>
+    </section>
+
+    <div class="layout">
+      <div>
+        <div class="card">
+          <div class="tabs" id="tabs"></div>
+          <div class="code">
+            <div class="gutter" id="gutter"><pre id="gutter-pre">1</pre></div>
+            <div class="editor">
+              <pre id="hl" aria-hidden="true"><code id="hl-code"></code></pre>
+              <textarea id="src" wrap="off" spellcheck="false" autocapitalize="off" autocorrect="off" aria-label="Código fuente"></textarea>
+            </div>
+          </div>
+          <div class="tabs" style="margin: 0.6rem 0 0">
+            <button id="btn-nuevo" class="ghost">+ archivo</button>
+
+            <label class="note" id="repo-picker" hidden style="cursor: pointer">
+              abrir del repo:
+              <select id="archivos-repo"><option value="">(elige uno)</option></select>
+
+            </label>
+            <label class="note" style="cursor: pointer">
+              abrir local:
+              <input id="archivo-local" type="file" accept=".ino,.cpp,.c,.h,.hpp,.S" />
+            </label>
+
+            <span class="grow"></span>
+            <button id="btn-descargar-ino" class="ghost">descargar fuente (.ino)</button>
+            <button id="btn-descargar-hex" class="ghost" disabled title="Descarga el Intel HEX compilado para grabarlo con otra herramienta (avrdude, IDE de Arduino, otro flasher)">descargar .hex</button>
+
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Salida</h2>
+          <pre id="salida" aria-live="polite"></pre>
+        </div>
+
+        <div class="card" id="tutorial-card">
+          <h2>Tutoriales de uso</h2>
+          <div class="tutorial-grid">
+            <details open>
+              <summary>1 · Editar sin romper el sketch</summary>
+              <ol>
+                <li>Abre <strong>DigisparkMouse.ino</strong> desde la lista del repositorio o carga un archivo local.</li>
+                <li>Modificá una línea; el resaltado, la numeración y el diagnóstico se actualizan solos.</li>
+                <li>Usa <kbd>Tab</kbd> para indentar y <kbd>Ctrl/⌘ + S</kbd> para guardar. El compilador guarda un backup <code>.bak</code> antes de escribir.</li>
+                <li>En un sketch DigiMouse aparecerá el panel de configuración: cambia valores, revisa la vista previa y pulsa <strong>Aplicar al código</strong>.</li>
+              </ol>
+            </details>
+            <details>
+              <summary>2 · Compilar y leer los errores</summary>
+              <ol>
+                <li>Elige la variante de placa. Para este proyecto: <code>digistump:avr:digispark-tiny</code>.</li>
+                <li>Pulsa <strong>Compilar</strong> o usa <kbd>Ctrl/⌘ + Enter</kbd>. El compilador WebAssembly del navegador compila 100% en cliente: no se instala nada.</li>
+                <li>La barra muestra flash usada; el panel separa errores, warnings, tiempos y archivos incluidos.</li>
+                <li>Haz clic en un error para saltar a su línea. Un sketch que no compila nunca se habilita para grabar.</li>
+              </ol>
+            </details>
+            <details>
+              <summary>3 · Grabar de forma segura</summary>
+              <ol>
+                <li>Compilá primero y confirmá que el vector de reset sea <code>jmp</code>/<code>rjmp</code> y que la imagen entre en 6012 bytes.</li>
+                <li>Pulsa <strong>Grabar compilado</strong>. Chrome abrirá el selector WebUSB.</li>
+                <li>Desconecta y vuelve a conectar la Digispark mientras el selector está abierto; elige <code>16D0:0753</code>.</li>
+                <li>No desconectes la placa durante borrado o escritura. Al terminar se reenumera como mouse HID.</li>
+              </ol>
+              <p class="note warn"><strong>Si aparece “La placa no volvió a responder después del borrado”:</strong> el borrado sí terminó. Dejá la placa desconectada, pulsá <strong>Grabar compilado</strong> inmediatamente y recién cuando Chrome esté esperando volvé a enchufarla. Ese segundo intento retoma la escritura y no vuelve a borrar la flash.</p>
+            </details>
+            <details>
+              <summary>4 · Si algo no funciona</summary>
+              <ul>
+                <li><strong>Falta <code>Arduino.h</code>:</strong> la primera compilación no terminó de descargar el compilador. Vuelve a pulsar <strong>Compilar</strong> con conexión estable; después queda en la caché.</li>
+                <li><strong>El programa no entra:</strong> el ATtiny85 tiene 6012 bytes útiles. La barra de flash se pone en rojo al pasarse.</li>
+                <li><strong>La placa no volvió a responder después del borrado:</strong> no cierres ni recargues la página. Dejala desconectada, pulsá <strong>Grabar compilado</strong> inmediatamente y enchufala sólo cuando Chrome esté esperando. El siguiente intento retoma la escritura; no vuelve a borrar.</li>
+                <li><strong>Errores raros con <code>Serial</code>:</strong> este micro no tiene puerto serie. Usa otro medio para depurar (por ejemplo <code>DigiUSB</code>).</li>
+                <li><strong>No quiero usar el ratón USB:</strong> puedes editar y compilar cualquier sketch; el panel de configuración solo aparece con <code>DigiMouse.h</code>.</li>
+                <li>Puedes cargar un <code>.hex</code>/<code>.bin</code> ya compilado y grabarlo directamente, sin compilar nada.</li>
+              </ul>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="card">
+          <h2>Compilación</h2>
+          <div class="compilando" id="compilando" hidden>
+            <div class="compilando-fila">
+              <span id="compilando-texto">Preparando…</span>
+              <span class="pct" id="compilando-pct">0 %</span>
+            </div>
+            <div class="progress" id="progreso-compilacion" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Avance de la compilación">
+              <div id="progreso-compilacion-fill"></div>
+            </div>
+          </div>
+          <div id="build-resumen" class="note">Sin compilar todavía.</div>
+          <div class="progress" id="flash-bar"><div id="flash-fill"></div></div>
+          <dl id="build-kv" class="kv"></dl>
+          <ul class="findings" id="build-findings"></ul>
+        </div>
+
+        <div class="card">
+          <h2>Diagnóstico ATtiny85</h2>
+          <ul class="findings" id="lint-findings"><li class="info"><span class="tag">…</span><span>Analizando…</span></li></ul>
+        </div>
+
+        <div class="card" id="grabar-card">
+          <h2>Grabar en la placa</h2>
+          <p class="note">
+            Misma mecánica que el flasher: clic, el diálogo de Chrome queda escuchando, desconecta y vuelve a conectar la placa
+            (el bootloader sólo escucha ~5 s) y elegila como <span class="mono">16D0:0753</span>.
+          </p>
+
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center">
+            <button id="btn-conectar">Conectar</button>
+
+            <label class="note" style="cursor: pointer">
+              cargar .hex/.bin:
+              <input id="archivo-firmware" type="file" accept=".hex,.bin" />
+
+            </label>
+
+            <button id="btn-grabar-archivo" disabled title="Graba en la placa el .hex/.bin que cargaste arriba">Grabar archivo</button>
+          </div>
+          <p class="note" id="archivo-estado" style="margin-top: 0.4rem">
+            Cargar un archivo sólo lo valida: no graba nada. Revisá el resultado y después pulsá <strong>Grabar archivo</strong>.
+          </p>
+
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-top: 0.55rem">
+            <label class="note" for="protocolo">Protocolo de escritura:</label>
+            <select id="protocolo" title="Cómo se transfieren las páginas al bootloader">
+              <option value="auto">Automático (según la versión del bootloader)</option>
+              <option value="v2">Forzar v2 (palabras de 4 bytes)</option>
+              <option value="v1">Forzar v1 (página completa)</option>
+            </select>
+          </div>
+          <p class="note" style="margin-top: 0.45rem">
+            Si el bootloader reporta una versión vieja pero falla al escribir, probá <strong>Forzar v2</strong>:
+            algunos clones hablan el protocolo nuevo con un <span class="mono">bcdDevice</span> viejo.
+            Con v2 el firmware se parchea con la tiny vector table, igual que en un bootloader v2 real.
+          </p>
+
+          <dl class="kv" id="device-kv"></dl>
+        </div>
+
+        <div class="card">
+          <h2>Pines de la placa</h2>
+          <figure class="pinmap3d" id="pinmap3d" aria-label="Mapa de pines de la Digispark">
+            <ul class="leyenda">
+              <li><i class="libre"></i> P0–P2 · libres (PWM)</li>
+              <li><i class="usb"></i> P3–P4 · USB</li>
+              <li><i class="reset"></i> P5 · RESET</li>
+            </ul>
+            <figcaption>P3/P4 son D± del USB: no los uses. P5 es RESET: como GPIO se pierde el bootloader.</figcaption>
+          </figure>
+        </div>
+
+        <div class="card" id="config-card" hidden>
+          <h2>Configuración del sketch de mouse</h2>
+          <div class="fields" id="config-fields"></div>
+          <ul class="findings" id="config-findings"></ul>
+          <p class="note" id="config-pending" hidden>Cambios sin aplicar: pulsa <strong>Aplicar al código</strong> para escribirlos en el fuente.</p>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.7rem; align-items: center">
+            <button id="btn-aplicar">Aplicar al código</button>
+
+            <button id="btn-preset-guardar" class="ghost">guardar preset</button>
+
+            <label class="note" style="cursor: pointer">
+              cargar preset: <input id="archivo-preset" type="file" accept=".json" />
+            </label>
+
+          </div>
+          <div style="margin-top: 0.8rem">
+            <canvas id="preview" width="320" height="320" aria-label="Previsualización del recorrido"></canvas>
+            <p class="note" id="preview-texto"></p>
+
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Compilador WebAssembly</h2>
+          <div id="wasm-status" class="wasm-status" role="status" aria-live="polite">
+            <strong>Compilador ATtiny85 activo en el navegador:</strong> el editor usa el compilador WebAssembly (cc1plus 7.3.0 + binutils AVR) para producir el Intel HEX sin instalar ninguna herramienta.
+          </div>
+          <p class="note" style="margin-top: 0.6rem">El HEX generado es idéntico byte a byte al de <code>arduino-cli</code> con <code>digistump:avr:digispark-tiny</code> para el core y las librerías que publica el sitio (DigiMouse, DigiUSB, DigiKeyboard, DigiJoystick, DigiCDC, Wire…). La compilación corre en un hilo aparte, así que puedes seguir usando el editor mientras trabaja y ver el progreso línea por línea. A partir de la segunda compilación tarda décimas de segundo.</p>
+        </div>
+
+        <div class="card tight">
+          <details>
+            <summary>Ayuda y límites de la placa</summary>
+            <ul class="note" style="padding-left: 1.1rem">
+              <li>ATtiny85: 8 KB de flash, de los que <strong>6012 bytes</strong> son para tu programa (el resto es el bootloader), y 512 bytes de RAM.</li>
+              <li>Sin cristal: el reloj es RC calibrado a 16.5 MHz. <span class="mono">F_CPU</span> lo pone el core; no lo definas a mano.</li>
+              <li>Pines libres: <strong>P0</strong> (PWM, SDA), <strong>P1</strong> (PWM) y <strong>P2</strong> (SCK). <strong>P3 y P4</strong> son D± del USB bit-bang: no los uses. <strong>P5 es RESET</strong>: solo sirve como GPIO si grabas RSTDISBL y el bootloader micronucleus se pierde (la placa deja de ser grabable por USB).</li>
+              <li>El firmware debe arrancar con <span class="mono">jmp</span>/<span class="mono">rjmp</span>: micronucleus parchea el vector de reset. Se verifica antes de grabar.</li>                <li>La compilación C/C++ corre en tu navegador con WebAssembly, en un hilo aparte: la primera vez descarga unos 20 MB y después funciona desde la caché.</li>
+            </ul>
+          </details>
+        </div>
+      </aside>
+    </div>
+
+    <footer style="display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: center; padding: 0.9rem 0.2rem 0; color: var(--muted); font-size: 0.8rem">
+      <span style="flex: 1">ATtiny85 Web Workbench · Editor C/C++</span>
+      <a href="../" class="note">Inicio</a>
+      <a href="../manual.html" class="note">Manual</a>
+      <a href="https://valedam.lat/" target="_blank" rel="noreferrer noopener" class="note">valedam.lat</a>
+      <a href="https://paypal.me/rdvt?locale.x=es_XC&country.x=MX" target="_blank" rel="noreferrer noopener" class="note">♡ Donar</a>
+    </footer>
+
+    <script type="module" src="../toolchain-hub.js"></script>
+    <script type="module">
+      import { CompileAgent, agentUrlFromLocation, agenteHabilitado, AgentError, AGENT_COMMAND } from "./agent.js";
+      import { lintSource, checkFlashImage, usagePercent, summarizeBuild, ATTINY85_RAM, FALLBACK_BOARDS } from "./attiny85.js";
+      import {
+        MOUSE_DEFINES,
+        detectConfig,
+        applyConfig,
+        validateConfig,
+        cycleStats,
+        pathPoints,
+        buildPreset,
+        parsePreset,
+      } from "./mouse-config.js";
+      import { MicronucleusFlasher, FASE_ETIQUETAS } from "../flasher/micronucleus.js";
+      import { decodeFirmware, parseIntelHex } from "../flasher/intelhex.js";
+      import { iniciarPinmap3D } from "./pinmap-3d.js";
+
+      const $ = (id) => document.getElementById(id);
+      const agent = new CompileAgent(agentUrlFromLocation());
+      const flasher = new MicronucleusFlasher({ onLog: (line) => log(line) });
+
+      const DEFAULT_SKETCH = "DigisparkMouse/DigisparkMouse.ino";
+      const state = {
+        boards: [...FALLBACK_BOARDS],
+        board: null,
+        tabs: [],
+        active: 0,
+        lastBuild: null,
+        compiled: null, // { hex, image }
+        loaded: null, // { image, name, format } del .hex/.bin cargado a mano
+        busy: false,
+        configDirty: false, // el usuario tocó valores y todavía no los aplicó
+      };
+
+      /* ------------------------------- utilidades ----------------------------- */
+
+      function log(line) {
+        const time = new Date().toLocaleTimeString("es-AR", { hour12: false });
+        const out = $("salida");
+        out.textContent += `[${time}] ${line}\n`;
+        const lines = out.textContent.split("\n");
+        if (lines.length > 400) out.textContent = lines.slice(-400).join("\n");
+        out.scrollTop = out.scrollHeight;
+      }
+
+      const escapeHtml = (text) =>
+        text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      const stem = (name) => name.replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9_]/g, "_") || "Sketch";
+
+      /* -------------------------------- editor -------------------------------- */
+
+      // Resaltado sin dependencias: un solo regex con alternativas y se pinta
+      // encima del textarea transparente.
+      const TOKEN_RE =
+        /(\/\*[\s\S]*?\*\/|\/\/[^\n]*)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')|(^[ \t]*#[^\n]*$)|(\b(?:void|int|char|unsigned|signed|long|short|byte|bool|boolean|float|double|const|static|volatile|if|else|for|while|do|switch|case|break|continue|return|struct|class|enum|typedef|sizeof|true|false|HIGH|LOW|INPUT|OUTPUT|INPUT_PULLUP|setup|loop|delay|delayMicroseconds|pinMode|digitalRead|digitalWrite|analogRead|analogWrite|millis|micros|attachInterrupt|PROGMEM|ISR|NULL)\b)|(\b(?:0[xX][0-9a-fA-F]+|\d+)\b)/gm;
+
+      function highlight(code) {
+        let out = "";
+        let last = 0;
+        for (const match of code.matchAll(TOKEN_RE)) {
+          out += escapeHtml(code.slice(last, match.index));
+          const cls = match[1] ? "cmt" : match[2] ? "str" : match[3] ? "pre" : match[4] ? "kw" : "num";
+          out += `<span class="t-${cls}">${escapeHtml(match[0])}</span>`;
+          last = match.index + match[0].length;
+        }
+        return out + escapeHtml(code.slice(last));
+      }
+
+      function refreshEditor() {
+        const code = $("src").value;
+        $("hl-code").innerHTML = highlight(code) + "\n";
+        const lines = code.split("\n").length;
+        $("gutter-pre").textContent = Array.from({ length: lines }, (_, i) => i + 1).join("\n");
+        const tab = state.tabs[state.active];
+        if (tab) tab.content = code;
+      }
+
+      function syncScroll() {
+        const source = $("src");
+        $("hl").scrollTop = source.scrollTop;
+        $("hl").scrollLeft = source.scrollLeft;
+        $("gutter-pre").style.transform = `translateY(${-source.scrollTop}px)`;
+      }
+
+      function gotoLine(line) {
+        const source = $("src");
+        const lines = source.value.split("\n");
+        if (line < 1 || line > lines.length) return;
+        const offset = lines.slice(0, line - 1).reduce((total, text) => total + text.length + 1, 0);
+        source.focus();
+        source.setSelectionRange(offset, offset + lines[line - 1].length);
+        source.scrollTop = Math.max(0, (line - 8) * 20);
+        syncScroll();
+      }
+
+      function renderTabs() {
+        const container = $("tabs");
+        container.innerHTML = "";
+        state.tabs.forEach((tab, index) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = `tab${index === state.active ? " active" : ""}`;
+          button.textContent = `${index === 0 ? "★ " : ""}${tab.name}${tab.dirty ? " ●" : ""}`;
+          button.title = tab.path ? `repo: ${tab.path}` : "archivo nuevo (no está en el repo)";
+          button.addEventListener("click", () => selectTab(index));
+          if (index > 0) {
+            const close = document.createElement("span");
+            close.textContent = "×";
+            close.style.color = "var(--muted)";
+            close.addEventListener("click", (event) => {
+              event.stopPropagation();
+              state.tabs.splice(index, 1);
+              state.active = 0;
+              loadActiveTab();
+            });
+            button.append(close);
+          }
+          container.append(button);
+        });
+      }
+
+      function selectTab(index) {
+        state.tabs[state.active].content = $("src").value;
+        state.active = index;
+        loadActiveTab();
+      }
+
+      function loadActiveTab() {
+        $("src").value = state.tabs[state.active]?.content ?? "";
+        refreshEditor();
+        renderTabs();
+        scheduleChecks();
+      }
+
+      /* ------------------------------ compilación ----------------------------- */
+
+      function board() {
+        return state.board ?? state.boards[0];
+      }
+
+      /* --------------------- avance de la compilación ------------------------ */
+
+      /**
+       * Barra de progreso del panel de compilación.
+       *
+       * El compilador informa `meta.fraccion` (0..1) en cada evento, así que el
+       * avance es real y no una animación decorativa. La fracción nunca retrocede:
+       * si un mensaje llega desordenado, se conserva el máximo alcanzado.
+       */
+      const progresoUI = {
+        fraccion: 0,
+        arranque: 0,
+        texto: "",
+        temporizador: null,
+
+        iniciar(texto = "Preparando la compilación…") {
+          this.fraccion = 0;
+          this.arranque = performance.now();
+          this.texto = texto;
+          const caja = $("compilando");
+          caja.hidden = false;
+          caja.classList.remove("listo", "error");
+          window.clearInterval(this.temporizador);
+          // El reloj de segundos se refresca solo: entre eventos el usuario ve que avanza.
+          this.temporizador = window.setInterval(() => this.pintar(), 200);
+          this.pintar();
+        },
+
+        avanzar(meta, linea) {
+          if (!this.temporizador) this.iniciar("Compilando…");
+          const objetivo = Number(meta?.fraccion);
+          if (Number.isFinite(objetivo)) this.fraccion = Math.min(1, Math.max(this.fraccion, objetivo));
+          // Los avisos del compilador (sin meta) no pisan la etiqueta de la fase.
+          if (meta?.fase_etiqueta) this.texto = meta.fase_etiqueta;
+          else if (linea && !this.texto) this.texto = linea;
+          this.pintar();
+        },
+
+        terminar(texto) {
+          this.fraccion = 1;
+          this.texto = texto;
+          this.detenerReloj();
+          $("compilando").classList.add("listo");
+          this.pintar();
+          // El resumen igual queda arriba, así que la barra se retira sola.
+          window.setTimeout(() => {
+            if (!this.temporizador) $("compilando").hidden = true;
+          }, 2500);
+        },
+
+        fallar(texto) {
+          this.texto = texto;
+          this.detenerReloj();
+          $("compilando").classList.add("error");
+          this.pintar();
+        },
+
+        detenerReloj() {
+          window.clearInterval(this.temporizador);
+          this.temporizador = null;
+        },
+
+        pintar() {
+          const porcentaje = Math.round(this.fraccion * 100);
+          $("progreso-compilacion-fill").style.width = `${porcentaje}%`;
+          $("compilando-pct").textContent = `${porcentaje} %`;
+          $("progreso-compilacion").setAttribute("aria-valuenow", String(porcentaje));
+          if (this.temporizador) {
+            const segundos = ((performance.now() - this.arranque) / 1000).toFixed(1);
+            $("compilando-texto").textContent = `${this.texto} · ${segundos} s`;
+          } else {
+            $("compilando-texto").textContent = this.texto;
+          }
+        },
+      };
+
+      /* ------------------ compilador en un Web Worker aparte ------------------ */
+
+      let workerCompilador = null;
+      let idTrabajo = 0;
+      const trabajos = new Map();
+
+      /**
+       * Crea (una sola vez) el worker del compilador. Vive durante toda la sesión
+       * para conservar en memoria los ~20 MB de assets ya descargados; por eso las
+       * compilaciones siguientes son casi instantáneas.
+       */
+      function obtenerWorker() {
+        if (workerCompilador) return workerCompilador;
+        workerCompilador = new Worker(new URL("../compiler/worker.js", window.location.href), { type: "module" });
+        workerCompilador.addEventListener("message", (evento) => {
+          const { id, tipo } = evento.data ?? {};
+          const trabajo = trabajos.get(id);
+          if (!trabajo) return;
+          if (tipo === "progreso") {
+            trabajo.progreso(evento.data.linea, evento.data.meta);
+            return;
+          }
+          trabajos.delete(id);
+          if (tipo === "resultado") trabajo.resolver(evento.data.resultado);
+          else trabajo.rechazar(Object.assign(new Error(evento.data.mensaje), { infraestructura: Boolean(evento.data.infraestructura) }));
+        });
+        workerCompilador.addEventListener("error", (evento) => {
+          // Fallo del worker en sí (no de la compilación): se descarta y se reintenta arriba.
+          const error = new Error(evento.message || "El worker del compilador falló al iniciarse");
+          error.infraestructura = true;
+          for (const trabajo of trabajos.values()) trabajo.rechazar(error);
+          trabajos.clear();
+          workerCompilador = null;
+        });
+        return workerCompilador;
+      }
+
+      /** Envía una compilación al worker y resuelve con el resultado del compilador. */
+      function compilarEnWorker({ fuente, archivos, base, progreso }) {
+        const id = ++idTrabajo;
+        return new Promise((resolver, rechazar) => {
+          trabajos.set(id, { resolver, rechazar, progreso });
+          try {
+            obtenerWorker().postMessage({ id, tipo: "compilar", fuente, archivos, base });
+          } catch (error) {
+            trabajos.delete(id);
+            const fallo = new Error(`No pude enviar el trabajo al worker: ${error?.message || error}`);
+            fallo.infraestructura = true;
+            rechazar(fallo);
+          }
+        });
+      }
+
+      /**
+       * Compila con el compilador WASM: primero en el worker (la interfaz no se
+       * congela y el progreso se ve fluir) y, si el worker no puede usarse, en el
+       * hilo principal.
+       *
+       * Un error de compilación NO lanza: vuelve como { ok: false, errores }. Solo
+       * se lanza cuando el compilador no está disponible, para poder pasar al agente.
+       */
+      async function compilarConWasm(fuente, archivos, progreso) {
+        try {
+          return await compilarEnWorker({ fuente, archivos, base: window.__compiladorBase, progreso });
+        } catch (error) {
+          if (!error?.infraestructura) return { ok: false, errores: String(error?.message || error).split("\n") };
+          log(`Sin worker (${error.message}); compilo en el hilo principal.`);
+        }
+
+        const modulo = await import("../compiler/compiler.js");
+        modulo.fijarBaseAssets(window.__compiladorBase);
+        try {
+          return await modulo.compilar(fuente, { archivos, progreso });
+        } catch (error) {
+          return { ok: false, errores: String(error?.message || error).split("\n") };
+        }
+      }
+
+      /**
+       * Compila el sketch activo: worker WASM → hilo principal → agente local.
+       * Las dos primeras rutas comparten el contrato { ok, hex, bytes }.
+       */
+      async function compile() {
+        if (state.busy) return;
+        state.tabs[state.active].content = $("src").value;
+        const main = state.tabs[0];
+        setBusy(true);
+        log(`Compilando ${main.name} para ${board().fqbn}…`);
+        progresoUI.iniciar("Preparando la compilación…");
+        try {
+          const archivos = state.tabs.slice(1).map((tab) => ({ name: tab.name, content: tab.content }));
+          // La barra consume el avance estructurado; el log conserva el detalle.
+          // Algunas notificaciones son solo de avance (sin línea de texto).
+          const alProgresar = (linea, meta) => {
+            progresoUI.avanzar(meta, linea);
+            if (linea) log(linea);
+          };
+          let result;
+          try {
+            result = await compilarConWasm(main.content, archivos, alProgresar);
+          } catch (error) {
+            // El compilador del navegador no está disponible: último recurso, el agente local.
+            log(`Sin compilador WebAssembly (${error.message}); pruebo el agente local.`);
+            progresoUI.iniciar("Compilando con el agente local…");
+            result = await agent.compile({ source: main.content, name: stem(main.name), fqbn: board().fqbn, files: archivos });
+          }
+
+          state.lastBuild = result;
+          renderBuild(result);
+          if (result.ok) {
+            state.compiled = { hex: result.hex, image: parseIntelHex(result.hex).image };
+            const tiempo = result.totalMs ? ` tiempo: ${result.totalMs} ms` : "";
+            progresoUI.terminar(`Compilación completa: ${result.bytes} bytes`);
+            log(`OK: ${result.bytes} bytes de imagen (${usagePercent(result.bytes, board().maximumSize)}% del espacio de usuario).${tiempo}`);
+          } else {
+            state.compiled = null;
+            progresoUI.fallar("La compilación falló");
+            log("La compilación falló. Mirá los errores en el panel de compilación.");
+          }
+        } catch (error) {
+          state.lastBuild = null;
+          renderBuild(null);
+          const message = error instanceof AgentError ? error.message : String(error);
+          progresoUI.fallar("No se pudo compilar");
+          log(`ERROR: ${message}`);
+          setChip("error", "Compilador no disponible");
+        } finally {
+          setBusy(false);
+          renderChecks();
+        }
+      }
+
+      function renderBuild(result) {
+        const summary = summarizeBuild(result ?? {});
+        const used = result?.bytes ?? 0;
+        const budget = board().maximumSize ?? 6012;
+
+        if (!result) {
+          $("build-resumen").className = "note";
+          $("build-resumen").textContent = "Sin compilar todavía.";
+          $("build-kv").innerHTML = "";
+          $("build-findings").innerHTML = "";
+          $("flash-fill").style.width = "0%";
+          $("btn-descargar-hex").disabled = true;
+          return;
+        }
+
+        const percent = usagePercent(used, budget);
+        $("build-resumen").className = `note ${result.ok ? "ok" : "error"}`;
+        $("build-resumen").textContent = result.ok
+          ? `Compilado: ${used} bytes de ${budget} (${percent}%).`
+          : "La compilación falló.";
+        $("flash-fill").style.width = `${percent}%`;
+        $("flash-bar").classList.toggle("over", used > budget);
+
+        const kv = $("build-kv");
+        kv.innerHTML = "";
+        const add = (key, value) => {
+          if (value === null || value === undefined || value === "") return;
+          const dt = document.createElement("dt");
+          dt.textContent = key;
+          const dd = document.createElement("dd");
+          dd.textContent = String(value);
+          kv.append(dt, dd);
+        };
+        // El HEX sólo queda descargable si la última compilación fue válida:
+        // así el botón nunca entrega un archivo que no se puede grabar.
+        $("btn-descargar-hex").disabled = !(result.ok && result.hex);
+        add("Flash usada", result.ok ? `${used} / ${budget} bytes` : null);
+        add("RAM global", summary.ram !== null ? `${summary.ram} / ${ATTINY85_RAM} bytes` : null);
+        add("Placa", board().name);
+        add("F_CPU", board().fCpu?.replace(/L$/, ""));
+        add("Archivos", result.files?.join(", "));
+
+        const list = $("build-findings");
+        list.innerHTML = "";
+        const LOCATION = /^(?<file>[^:\s]+):(?<line>\d+):(?<col>\d+):\s*(?<kind>error|warning|fatal error):\s*(?<message>.*)$/i;
+        for (const line of [...summary.errors.map((text) => ["error", text]), ...summary.warnings.map((text) => ["warn", text])].slice(0, 40)) {
+          const location = LOCATION.exec(line[1]);
+          list.append(
+            findingItem(
+              line[0],
+              location ? location.groups.message : line[1],
+              location ? Number(location.groups.line) : null,
+              location ? `${location.groups.file}:${location.groups.line}` : null,
+            ),
+          );
+        }
+      }
+
+      function findingItem(level, message, line = null, prefix = null) {
+        const item = document.createElement("li");
+        item.className = level;
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = level;
+        item.append(tag);
+        const body = document.createElement("span");
+        if (line) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "goto";
+          button.textContent = `${prefix ? prefix + " " : ""}${message}`;
+          button.title = "Ir a la línea";
+          button.addEventListener("click", () => gotoLine(line));
+          body.append(button);
+        } else {
+          body.textContent = message;
+        }
+        item.append(body);
+        return item;
+      }
+
+      /* ------------------------------- chequeos ------------------------------- */
+
+      let checksTimer = null;
+      function scheduleChecks() {
+        clearTimeout(checksTimer);
+        checksTimer = setTimeout(renderChecks, 350);
+      }
+
+      function renderChecks() {
+        const source = $("src").value;
+        const lint = lintSource(source, { board: board() });
+
+        // Contradicciones que sólo se ven al compilar y mirar el binario.
+        if (state.compiled) {
+          const image = checkFlashImage(state.compiled.image, board());
+          for (const finding of image.findings) lint.push(finding);
+        }
+
+        const list = $("lint-findings");
+        list.innerHTML = "";
+        if (lint.length === 0) {
+          const item = document.createElement("li");
+          item.className = "info";
+          item.innerHTML = '<span class="tag">ok</span><span>Sin observaciones para ATtiny85.</span>';
+          list.append(item);
+        } else {
+          for (const finding of lint) list.append(findingItem(finding.level, finding.message, finding.line));
+        }
+
+        renderConfigPanel();
+      }
+
+      /* --------------------------- config del mouse --------------------------- */
+
+      /** Se arma una vez y después se muestran/ocultan los inputs que existan. */
+      function buildConfigInputs() {
+        const container = $("config-fields");
+        container.innerHTML = "";
+        for (const define of MOUSE_DEFINES) {
+          const field = document.createElement("div");
+          field.className = "field";
+          field.hidden = true;
+          field.dataset.define = define.name;
+
+          const label = document.createElement("label");
+          label.textContent = `${define.label} (${define.name})`;
+          label.htmlFor = `cfg-${define.name}`;
+
+          let input;
+          if (define.options) {
+            input = document.createElement("select");
+            for (const option of define.options) {
+              const item = document.createElement("option");
+              item.value = String(option.value);
+              item.textContent = option.label;
+              input.append(item);
+            }
+          } else {
+            input = document.createElement("input");
+            input.type = "number";
+            input.min = String(define.min);
+            input.max = String(define.max);
+            input.step = "1";
+          }
+          input.id = `cfg-${define.name}`;
+          input.addEventListener("input", () => {
+            state.configDirty = true;
+            $("config-pending").hidden = false;
+            updatePreview();
+            renderConfigFindings();
+          });
+
+          const help = document.createElement("span");
+          help.className = "help";
+          help.textContent = define.help ?? "";
+
+          field.append(label, input, help);
+          container.append(field);
+        }
+      }
+
+      function readConfigValues() {
+        const values = {};
+        for (const define of MOUSE_DEFINES) {
+          const input = $(`cfg-${define.name}`);
+          const field = input?.closest(".field");
+          if (!input || !field || field.hidden) continue;
+          const parsed = Number.parseInt(input.value, 10);
+          values[define.name] = Number.isFinite(parsed) ? parsed : null;
+        }
+        return values;
+      }
+
+      function configValuesFromSource() {
+        const detected = detectConfig($("src").value);
+        if (!detected.found) return null;
+        for (const define of MOUSE_DEFINES) {
+          const field = document.querySelector(`.field[data-define="${define.name}"]`);
+          if (field) field.hidden = detected.values[define.name] === undefined;
+          const input = $(`cfg-${define.name}`);
+          // Si el usuario tiene cambios sin aplicar, el fuente no manda.
+          if (state.configDirty) continue;
+          if (input && detected.values[define.name] !== undefined && detected.values[define.name] !== null) {
+            input.value = String(detected.values[define.name]);
+          }
+        }
+        return detected;
+      }
+
+      function renderConfigPanel() {
+        const detected = configValuesFromSource();
+        $("config-card").hidden = !detected;
+        if (!detected) return;
+        renderConfigFindings();
+        updatePreview();
+      }
+
+      function renderConfigFindings() {
+        // Los errores de rango se marcan sobre cada input y se listan en su
+        // propio panel (el de diagnóstico es del linter del código).
+        const values = readConfigValues();
+        const findings = validateConfig(values);
+        for (const define of MOUSE_DEFINES) {
+          const input = $(`cfg-${define.name}`);
+          if (!input) continue;
+          const bad = findings.some((finding) => finding.level === "error" && finding.name === define.name);
+          input.classList.toggle("bad", bad);
+        }
+        const list = $("config-findings");
+        list.innerHTML = "";
+        for (const finding of findings) {
+          if (finding.level === "info") continue;
+          list.append(findingItem(finding.level, finding.message));
+        }
+      }
+
+      function updatePreview() {
+        const values = readConfigValues();
+        const stats = cycleStats(values);
+        const canvas = $("preview");
+        const ctx = canvas.getContext("2d");
+        const size = canvas.width;
+        ctx.clearRect(0, 0, size, size);
+
+        const padding = 40;
+        const points = pathPoints(values);
+        const extent = Math.max(...points.flat().map(Math.abs), 1);
+        const scale = (size - padding * 2) / (extent * 2);
+
+        // Origen en el centro: así el cuadro se ve donde arranca el cursor.
+        const toCanvas = ([x, y]) => [size / 2 + x * scale, size / 2 + y * scale];
+
+        ctx.strokeStyle = "#2b3038";
+        ctx.beginPath();
+        ctx.moveTo(size / 2, padding / 2);
+        ctx.lineTo(size / 2, size - padding / 2);
+        ctx.moveTo(padding / 2, size / 2);
+        ctx.lineTo(size - padding / 2, size / 2);
+        ctx.stroke();
+
+        ctx.strokeStyle = "#6ee7a8";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        points.forEach(([x, y], index) => {
+          const [cx, cy] = toCanvas([x, y]);
+          if (index === 0) ctx.moveTo(cx, cy);
+          else ctx.lineTo(cx, cy);
+        });
+        ctx.stroke();
+
+        ctx.fillStyle = "#7fb2ff";
+        const [ox, oy] = toCanvas([0, 0]);
+        ctx.beginPath();
+        ctx.arc(ox, oy, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (values.HACER_CLICK) {
+          const [cx, cy] = toCanvas([0, 0]);
+          ctx.strokeStyle = "#ffcc66";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+
+        const seconds = (value) => `${(value / 1000).toFixed(value < 10000 ? 1 : 0)} s`;
+        $("preview-texto").textContent =
+          `Cuadro de ${stats.sidePx} px de lado en ${stats.steps} pasos · ${stats.speedPxPerSecond} px/s · ` +
+          `recorrido ${seconds(stats.activeMs)} · ciclo completo ${seconds(stats.cycleMs)}` +
+          (values.HACER_CLICK ? " (con click)" : "") +
+          (values.USAR_RUEDA ? " (con rueda)" : "");
+      }
+
+      /* ------------------------------- grabación ------------------------------ */
+
+      async function flashImage(image) {
+        if (!image) {
+          log("No hay firmware para grabar: compilá primero.");
+          return;
+        }
+        const check = checkFlashImage(image, board());
+        if (!check.ok) {
+          log(`No grabo: ${check.findings.filter((f) => f.level === "error").map((f) => f.message).join(" ")}`);
+          return;
+        }
+        try {
+          if (!flasher.connected) {
+            const info = await flasher.requestDevice();
+            renderDevice(info);
+          }
+          // Reutiliza la misma barra: mientras graba muestra el avance del protocolo.
+          progresoUI.iniciar("Preparando la grabación…");
+          await flasher.flash(image, {
+            protocol: $("protocolo").value,
+            onProgress: (p) => {
+              const etiqueta = FASE_ETIQUETAS[p?.phase] ?? p?.phase ?? "Grabando";
+              const detalle = p?.phase === "writing" && p.escrito && p.total
+                ? ` (página ${p.pagina}/${p.paginas}, ${(p.escrito / 1024).toFixed(1)} de ${(p.total / 1024).toFixed(1)} KB)`
+                : "";
+              log(`${etiqueta}${detalle} — ${p.percentage}%`);
+              progresoUI.avanzar({ fraccion: p.percentage / 100, fase_etiqueta: etiqueta });
+            },
+          });
+          log("Grabado y arrancado.");
+          progresoUI.terminar("Grabado en la placa");
+        } catch (error) {
+          // La placa pudo quedar a medio borrar o haberse reenumerado: se suelta
+          // el handle para que el próximo intento vuelva a pedir permiso y
+          // reconecte limpio en lugar de escribir sobre un dispositivo muerto.
+          await flasher.close();
+          renderDevice(null);
+          progresoUI.fallar("No se pudo grabar");
+          log(`ERROR al grabar: ${error.message}`);
+          if (/no volvió a responder después del borrado/i.test(String(error?.message))) {
+            log("REINTENTO: dejá la placa desconectada, pulsá Grabar compilado ahora y enchufala cuando Chrome esté esperando. Se retomará la escritura sin volver a borrar.");
+          }
+        }
+      }
+
+      function renderDevice(info) {
+        const kv = $("device-kv");
+        kv.innerHTML = "";
+        if (!info) return;
+        const add = (key, value) => {
+          const dt = document.createElement("dt");
+          dt.textContent = key;
+          const dd = document.createElement("dd");
+          dd.textContent = String(value);
+          kv.append(dt, dd);
+        };
+        add("Bootloader", `micronucleus ${info.major}.${info.minor}`);
+        add("Flash de usuario", `${info.flashSize} bytes`);
+        add("Página", `${info.pageSize} bytes`);
+      }
+
+      /* --------------------------------- estado ------------------------------- */
+
+      function setChip(kind, text) {
+        const chip = $("agente-chip");
+        chip.className = `chip ${kind}`;
+        $("agente-texto").textContent = text;
+      }
+
+      function renderWasmStatus() {
+        const element = $("wasm-status");
+        if (!element) return;
+        if (typeof WebAssembly === "object") {
+          element.className = "wasm-status ok";
+          element.innerHTML =
+            "<strong>Compilador ATtiny85 activo en el navegador:</strong> cc1plus 7.3.0 + avr-as/avr-ld/avr-objcopy en WebAssembly. " +
+            "El editor compila <span class=\"mono\">digistump:avr:digispark-tiny</span> sin instalar nada; el agente local queda solo como respaldo si el módulo WASM no carga.";
+        } else {
+          element.className = "wasm-status";
+          element.innerHTML =
+            "<strong>WebAssembly no está disponible en este navegador.</strong> " +
+            "Usa Chrome, Edge o Firefox actualizados; sin WASM solo queda el agente local de compilación.";
+        }
+      }
+
+      function setBusy(value) {
+        state.busy = value;
+        for (const id of ["btn-compilar", "btn-guardar", "btn-grabar", "btn-nuevo", "btn-aplicar", "btn-grabar-archivo"]) {
+          const element = $(id);
+          if (element) element.disabled = value;
+        }
+        // Al terminar, los botones vuelven a depender de que haya firmware válido.
+        if (!value) {
+          updateLoadedButton();
+          updateCompiledButton();
+        }
+      }
+
+      /**
+       * Habilita "Grabar archivo" sólo si hay un .hex/.bin cargado que pase las
+       * validaciones de la placa elegida (tamaño y vector de reset).
+       */
+      function updateLoadedButton() {
+        const check = state.loaded ? checkFlashImage(state.loaded.image, board()) : null;
+        const button = $("btn-grabar-archivo");
+        if (button) button.disabled = state.busy || !check?.ok;
+      }
+
+      /**
+       * "Grabar compilado" sólo se habilita cuando hay una compilación válida:
+       * así no se puede disparar el diálogo de la placa sin firmware.
+       */
+      function updateCompiledButton() {
+        const button = $("btn-grabar");
+        if (button) button.disabled = state.busy || !state.compiled?.image;
+      }
+
+      /* --------------------------------- acciones ----------------------------- */
+
+      async function saveActive() {
+        const tab = state.tabs[state.active];
+        if (!tab) return;
+        if (!tab.path) {
+          download(`${tab.name}`, tab.content);
+          log(`${tab.name} no está en el repo: lo descargué.`);
+          return;
+        }
+        try {
+          const result = await agent.save({ path: tab.path, source: tab.content });
+          tab.dirty = false;
+          renderTabs();
+          log(`Guardado ${result.path} (backup: ${result.backup}).`);
+        } catch (error) {
+          log(`ERROR al guardar: ${error instanceof AgentError ? error.message : error}`);
+        }
+      }
+
+      function download(name, text) {
+        const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = name;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+
+      async function addFile(name) {
+        const clean = name.trim();
+        if (!clean) return;
+        state.tabs[state.active].content = $("src").value;
+        state.tabs.push({ name: clean, path: null, content: "", dirty: true });
+        state.active = state.tabs.length - 1;
+        loadActiveTab();
+        log(`Archivo nuevo ${clean}: se compila junto al sketch y puedes incluirlo con #include "${clean}".`);
+      }
+
+      /**
+       * Carga el sketch de ejemplo publicado en el sitio (DigisparkMouse/) para que
+       * el editor arranque con código real aunque el agente local no esté instalado.
+       * El compilador funciona 100% en el navegador, así que este ejemplo se puede
+       * compilar y grabar sin ningún paso previo.
+       */
+      async function cargarSketchPublicado() {
+        const url = new URL("../DigisparkMouse/DigisparkMouse.ino", window.location.href);
+        try {
+          const respuesta = await fetch(url);
+          if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+          const contenido = await respuesta.text();
+          const tab = { name: "DigisparkMouse.ino", path: null, content: contenido, dirty: false };
+          const active = state.tabs[state.active];
+          if (state.tabs.length === 1 && !active.path && !active.content.trim()) {
+            state.tabs[state.active] = tab;
+          } else {
+            state.tabs.push(tab);
+            state.active = state.tabs.length - 1;
+          }
+          state.configDirty = false;
+          $("config-pending").hidden = true;
+          loadActiveTab();
+          log(`Ejemplo cargado desde ${url.pathname} (${contenido.length} bytes).`);
+        } catch (error) {
+          log(`No pude cargar el ejemplo publicado (${error.message}). Puedes editar o abrir un archivo local.`);
+        }
+      }
+
+      async function openRepoFile(path) {
+        if (!path) return;
+        try {
+          const result = await agent.read(path);
+          state.tabs[state.active].content = $("src").value;
+          const tab = { name: path.split("/").pop(), path: result.path, content: result.source, dirty: false };
+          const active = state.tabs[state.active];
+          // Si el tab activo es el placeholder vacío del arranque, se reemplaza
+          // en vez de dejar un archivo fantasma al lado.
+          if (state.tabs.length === 1 && !active.path && !active.content.trim()) {
+            state.tabs[state.active] = tab;
+          } else {
+            state.tabs.push(tab);
+            state.active = state.tabs.length - 1;
+          }
+          state.configDirty = false;
+          $("config-pending").hidden = true;
+          loadActiveTab();
+          log(`Abierto ${result.path} (${result.source.length} bytes).`);
+        } catch (error) {
+          log(`ERROR al abrir ${path}: ${error instanceof AgentError ? error.message : error}`);
+        }
+      }
+
+      /* --------------------------------- arranque ----------------------------- */
+
+      function wire() {
+        $("src").addEventListener("input", () => {
+          const tab = state.tabs[state.active];
+          if (tab && !tab.dirty) {
+            tab.dirty = true;
+            renderTabs();
+          }
+          refreshEditor();
+          scheduleChecks();
+        });
+        $("src").addEventListener("scroll", syncScroll);
+
+        $("src").addEventListener("keydown", (event) => {
+          if (event.key === "Tab") {
+            event.preventDefault();
+            const source = $("src");
+            const { selectionStart, selectionEnd } = source;
+            source.setRangeText("  ", selectionStart, selectionEnd, "end");
+            source.dispatchEvent(new Event("input"));
+            return;
+          }
+          if (event.key === "Enter" && !event.shiftKey) {
+            // Auto-indentación: mantiene la del renglón actual.
+            const source = $("src");
+            const start = source.selectionStart;
+            const indent = /(^|\n)([ \t]*)[^\n]*$/.exec(source.value.slice(0, start))?.[2] ?? "";
+            if (indent) {
+              event.preventDefault();
+              source.setRangeText(`\n${indent}`, start, source.selectionEnd, "end");
+              source.dispatchEvent(new Event("input"));
+            }
+            return;
+          }
+          const ctrl = event.ctrlKey || event.metaKey;
+          if (ctrl && event.key === "Enter") {
+            event.preventDefault();
+            compile();
+          } else if (ctrl && (event.key === "s" || event.key === "S") && !event.shiftKey) {
+            event.preventDefault();
+            saveActive();
+          }
+        });
+
+        $("btn-compilar").addEventListener("click", compile);
+        $("btn-guardar").addEventListener("click", saveActive);
+        $("btn-grabar").addEventListener("click", () => flashImage(state.compiled?.image));
+        updateCompiledButton();
+        $("btn-conectar").addEventListener("click", async () => {
+          try {
+            renderDevice(await flasher.requestDevice());
+            log("Placa conectada en modo bootloader.");
+          } catch (error) {
+            log(`ERROR al conectar: ${error.message}`);
+          }
+        });
+        $("btn-nuevo").addEventListener("click", () => {
+          const name = prompt("Nombre del archivo (por ejemplo util.h):", "util.h");
+          if (name) addFile(name);
+        });
+        $("btn-descargar-ino").addEventListener("click", () => {
+          const tab = state.tabs[state.active];
+          if (tab) download(tab.name, tab.content);
+        });
+        $("btn-descargar-hex").addEventListener("click", () => {
+          const hex = state.compiled?.hex ?? state.lastBuild?.hex;
+          if (!hex) {
+            log("No hay HEX para descargar: compilá primero.");
+            return;
+          }
+          // Mismo nombre que produce arduino-cli (Sketch.ino.hex).
+          const name = `${stem(state.tabs[0]?.name ?? "Sketch.ino")}.ino.hex`;
+          download(name, hex);
+          log(`${name} descargado (${state.compiled?.image?.length ?? 0} bytes). Probalo con avrdude, el IDE de Arduino u otro flasher.`);
+        });
+
+        $("btn-aplicar").addEventListener("click", () => {
+          const values = readConfigValues();
+          const findings = validateConfig(values);
+          const error = findings.find((finding) => finding.level === "error");
+          if (error) {
+            log(`No aplico: ${error.message}`);
+            return;
+          }
+          const result = applyConfig($("src").value, values);
+          state.configDirty = false;
+          $("config-pending").hidden = true;
+          $("src").value = result.source;
+          $("src").dispatchEvent(new Event("input"));
+          log(`Aplicado al código: ${result.changed.join(", ")}${result.skipped.length ? ` (no están en el sketch: ${result.skipped.join(", ")})` : ""}.`);
+        });
+
+        $("btn-preset-guardar").addEventListener("click", () => {
+          const preset = buildPreset(readConfigValues(), `preset ${new Date().toISOString().slice(0, 10)}`);
+          download("preset-mouse.json", JSON.stringify(preset, null, 2));
+          log("Preset descargado.");
+        });
+
+        $("archivo-preset").addEventListener("change", async (event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          const parsed = parsePreset(await file.text());
+          if (!parsed.ok) {
+            log(`Preset inválido: ${parsed.errors.join(" ")}`);
+            return;
+          }
+          for (const [name, value] of Object.entries(parsed.values)) {
+            const input = $(`cfg-${name}`);
+            if (input) input.value = String(value);
+          }
+          state.configDirty = true;
+          $("config-pending").hidden = false;
+          updatePreview();
+          renderConfigFindings();
+          log(`Preset "${parsed.name}" cargado (${Object.keys(parsed.values).length} parámetros). Pulsa Aplicar al código.`);
+        });
+
+        // Cargar el archivo NO graba: sólo lo decodifica, lo valida y habilita
+        // el botón. Así se puede revisar el tamaño y el vector de reset antes
+        // de tocar la placa.
+        $("archivo-firmware").addEventListener("change", async (event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          const estado = $("archivo-estado");
+          try {
+            const { image, format } = decodeFirmware(await file.arrayBuffer(), file.name);
+            state.loaded = { image, name: file.name, format };
+            const check = checkFlashImage(image, board());
+            updateLoadedButton();
+            if (check.ok) {
+              estado.className = "note ok";
+              estado.textContent = `${file.name}: ${image.length} bytes como ${format}, listo para grabar (vector ${check.vector?.text ?? "válido"}).`;
+              log(`${file.name}: ${image.length} bytes como ${format}. Validado: pulsá Grabar archivo cuando quieras grabar.`);
+            } else {
+              estado.className = "note error";
+              estado.textContent = `${file.name}: no se puede grabar — ${check.findings.filter((f) => f.level === "error").map((f) => f.message).join(" ")}`;
+              log(`${file.name}: ${image.length} bytes como ${format}, pero no pasa la validación.`);
+            }
+          } catch (error) {
+            state.loaded = null;
+            updateLoadedButton();
+            estado.className = "note error";
+            estado.textContent = `ERROR con ${file.name}: ${error.message}`;
+            log(`ERROR con ${file.name}: ${error.message}`);
+          }
+        });
+
+        $("btn-grabar-archivo").addEventListener("click", () => {
+          if (!state.loaded) {
+            log("Cargá un .hex/.bin primero.");
+            return;
+          }
+          flashImage(state.loaded.image);
+        });
+
+        $("archivo-local").addEventListener("change", async (event) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+          const text = await file.text();
+          state.tabs[state.active].content = $("src").value;
+          state.tabs.push({ name: file.name, path: null, content: text, dirty: true });
+          state.active = state.tabs.length - 1;
+          loadActiveTab();
+          log(`Abierto ${file.name} desde el disco (${text.length} bytes). No está en el repo: Guardar lo descarga.`);
+        });
+
+        $("placa").addEventListener("change", () => {
+          state.board = state.boards.find((item) => item.fqbn === $("placa").value) ?? state.boards[0];
+          log(`Placa: ${state.board.name} (${state.board.fqbn}), F_CPU ${state.board.fCpu}, ${state.board.maximumSize} bytes útiles.`);
+          // El límite de la placa cambia: el archivo cargado puede dejar de ser válido.
+          updateLoadedButton();
+          updateCompiledButton();
+          scheduleChecks();
+        });
+      }
+
+      function fillBoards() {
+        const select = $("placa");
+        select.innerHTML = "";
+        for (const item of state.boards) {
+          const option = document.createElement("option");
+          option.value = item.fqbn;
+          option.textContent = `${item.name} · ${String(item.fCpu).replace(/L$/, "")} Hz · ${item.maximumSize} B`;
+          select.append(option);
+        }
+        state.board = state.boards.find((item) => item.usesUsb) ?? state.boards[0];
+        select.value = state.board.fqbn;
+      }
+
+      async function loadRepositoryFileList() {
+        try {
+          const { files } = await agent.files();
+          const select = $("archivos-repo");
+          for (const path of files) {
+            const option = document.createElement("option");
+            option.value = path;
+            option.textContent = path;
+            select.append(option);
+          }
+          // Solo tiene sentido con el agente local (fuente: el repositorio de desarrollo).
+          $("repo-picker").hidden = false;
+        } catch (error) {
+          log(`No pude listar los archivos del repo: ${error instanceof AgentError ? error.message : error}`);
+        }
+      }
+
+      async function boot() {
+        buildConfigInputs();
+        renderWasmStatus();
+        wire();
+        fillBoards();
+
+        // Un tab inicial vacío para que el editor sirva aunque no haya agente.
+        state.tabs.push({ name: "DigisparkMouse.ino", path: null, content: "", dirty: false });
+        loadActiveTab();
+
+        // Inicializa la base de assets del compilador WASM en el navegador; esta ruta
+        // es independiente de import.meta.url porque el script es inline en HTML.
+        // La barra final es obligatoria: sin ella las rutas relativas dentro del
+        // compilador pierden el segmento "compiler/" y no se encuentra el .wasm.
+        if (!window.__compiladorBase) {
+          window.__compiladorBase = new URL("../compiler/", window.location.href).href;
+        }
+
+        // El agente local solo se busca en desarrollo: en el sitio publicado no
+        // existe y sondearlo solo genera errores de red en la consola.
+        if (!agenteHabilitado()) {
+          setChip("ok", "Compilador listo · 100% en tu navegador");
+          $("build-resumen").className = "note";
+          $("build-resumen").textContent =
+            "Todo listo: pulsa Compilar. El compilador funciona dentro de tu navegador y no hace falta instalar nada.";
+          await cargarSketchPublicado();
+          return;
+        }
+
+        setChip("warn", "Comprobando el agente local…");
+        try {
+          const health = await agent.health();
+          if (Array.isArray(health.boards) && health.boards.length > 0) {
+            state.boards = health.boards;
+            fillBoards();
+          }
+          setChip("ok", `Compilador listo · ${state.boards.length} placa(s)`);
+          log(`Agente local en ${agent.baseUrl}: opcional, solo añade abrir y guardar archivos del repositorio de desarrollo.`);
+          await loadRepositoryFileList();
+          await openRepoFile(DEFAULT_SKETCH);
+        } catch (error) {
+          // Sin agente local (lo normal para un usuario): se compila igual en el navegador.
+          setChip("ok", "Compilador listo · 100% en tu navegador");
+          $("build-resumen").className = "note";
+          $("build-resumen").textContent =
+            "Todo listo: pulsa Compilar. El compilador funciona dentro de tu navegador y no hace falta instalar nada.";
+          // El detalle del agente solo interesa a quien desarrolla el sitio.
+          console.info(`Agente local no disponible (opcional): ${error.message}\nPara desarrolladores: ${AGENT_COMMAND}`);
+          await cargarSketchPublicado();
+        }
+      }
+
+      await boot();
+
+      /* Mapa de pines 3D: monta en idle para no retrasar el arranque del editor.
+         Si no hay WebGL2 o falla, la leyenda estática de la tarjeta queda como respaldo. */
+      {
+        const contenedorPinmap = document.getElementById("pinmap3d");
+        if (contenedorPinmap) {
+          const enIdle =
+            typeof requestIdleCallback === "function"
+              ? (fn) => requestIdleCallback(fn, { timeout: 1200 })
+              : (fn) => setTimeout(fn, 200);
+          enIdle(async () => {
+            const resultado = await iniciarPinmap3D(contenedorPinmap);
+            if (resultado) contenedorPinmap.dataset.estado = "listo";
+          });
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flasher WebUSB · Digispark ATtiny85</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232ba6ff'/%3E%3Ctext x='16' y='22' font-family='sans-serif' font-size='15' font-weight='bold' text-anchor='middle' fill='%230a1622'%3EA8%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="../theme.css">
+    <style>
+      /* El sistema de diseño vive en `theme.css` (design.md §3). Aquí sólo se
+         mapean los nombres propios de esta página a los tokens compartidos;
+         `--bg`, `--line`, `--text` y `--warn` vienen de theme.css. */
+      :root {
+        color-scheme: dark;
+        --panel: var(--surface);
+        --panel-2: var(--surface-2);
+        --muted: var(--text-3);
+        --accent: var(--brand);
+        --accent-ink: var(--brand-ink);
+        --error: var(--danger);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        padding: 2.5rem 1.25rem 4rem;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.55 var(--font-sans);
+        max-width: 860px;
+        margin-inline: auto;
+      }
+      /* Compatibilidad: estas páginas definen sus propios controles, así que se
+         anulan los estilos base de formularios de theme.css. */
+      input[type="text"], input[type="search"], select { width: auto; }
+      .card { display: block; }
+      .field { margin-bottom: 0; }
+
+      h1 { font-family: var(--font-display); font-size: 1.55rem; margin: 0 0 0.35rem; letter-spacing: -0.01em; }
+      h2 { font-size: 1rem; margin: 0 0 0.9rem; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
+      p { margin: 0 0 0.6rem; }
+      code, pre, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+
+      .lead { color: var(--muted); margin-bottom: 1.5rem; }
+
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        padding: 1.15rem 1.25rem;
+        margin-bottom: 1rem;
+      }
+
+      .row { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; }
+      .spacer { flex: 1 1 auto; }
+
+      button {
+        font: inherit;
+        font-weight: 600;
+        color: var(--text);
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        padding: 0.6rem 1rem;
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-3); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+      button.primary:hover:not(:disabled) { background: var(--brand-hover); }
+      button.link { background: none; border: none; padding: 0; color: var(--muted); text-decoration: underline; font-weight: 400; }
+
+      input[type="file"] { color: var(--muted); font-size: 0.9rem; max-width: 100%; }
+
+      select {
+        font: inherit;
+        color: var(--text);
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        padding: 0.35rem 0.5rem;
+      }
+
+      .kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; font-size: 0.92rem; margin: 0.75rem 0 0; }
+      .kv dt { color: var(--muted); }
+      .kv dd { margin: 0; }
+
+      .note { font-size: 0.9rem; color: var(--muted); }
+      .note.warn { color: var(--warn); }
+      .note.error { color: var(--error); }
+      .note.ok { color: var(--accent); }
+
+      .progreso-fila { display: flex; align-items: baseline; gap: 0.5rem; margin: 0.75rem 0 0; }
+      .progreso-fila .pct { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--accent); }
+      .bar { height: 8px; border-radius: var(--r-full); background: var(--surface-3); border: 1px solid var(--line); overflow: hidden; margin: 0.3rem 0 0.35rem; }
+      .bar > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--brand-hover), var(--accent)); transition: width 0.15s linear; }
+      /* Mientras la placa está borrando o reenumerando no hay avance medible: la
+         barra late para que no parezca colgada. */
+      .bar.indeterminado > div { width: 35% !important; animation: latido 1.1s ease-in-out infinite alternate; }
+      @keyframes latido { from { margin-left: 0; } to { margin-left: 65%; } }
+      .bar.listo > div { background: linear-gradient(90deg, #2fa363, #6ee7a8); box-shadow: 0 0 10px #6ee7a899; }
+      .bar.error > div { background: linear-gradient(90deg, #ff7a6b, #ff9f6b); transition: none; }
+      .progreso-detalle { margin: 0 0 0.2rem; color: var(--muted); font-size: 0.8rem; }
+      .progreso-detalle.error { color: var(--error); }
+
+      #log {
+        margin: 0.75rem 0 0;
+        padding: 0.75rem;
+        max-height: 15rem;
+        overflow: auto;
+        background: #101013;
+        border: 1px solid var(--line);
+        border-radius: var(--r-md);
+        font-size: 0.82rem;
+        line-height: 1.5;
+        color: #b9c4d2;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      details { margin-top: 0.9rem; }
+      summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; }
+      details > *:not(summary) { margin-top: 0.7rem; }
+
+      ul { margin: 0.4rem 0 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.92rem; }
+      li { margin-bottom: 0.35rem; }
+      li strong { color: var(--text); }
+
+      a { color: var(--accent); }
+
+      .hero {
+        padding: 1.1rem 1.25rem;
+        margin-bottom: 1rem;
+        background: linear-gradient(135deg, #1b2530, #171a21 60%);
+        border: 1px solid #334252;
+        border-radius: 14px;
+      }
+      .hero h2 { margin: 0 0 0.3rem; color: var(--text); text-transform: none; font-size: 1.1rem; }
+      .hero p { color: var(--muted); margin: 0; }
+      .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; margin-top: 1rem; }
+      .flow-step { padding: 0.55rem; background: #202a35; border-radius: 9px; text-align: center; color: var(--muted); font-size: 0.78rem; }
+      .flow-step strong { display: block; color: var(--accent); font-size: 1.05rem; }
+      .tutorials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
+      .tutorials details { margin: 0; padding: 0.65rem 0.75rem; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+      .tutorials summary { color: var(--text); font-weight: 650; }
+      .tutorials ol, .tutorials ul { margin-top: 0.55rem; }
+      .tutorials li { margin-bottom: 0.3rem; }
+      @media (max-width: 600px) { .flow, .tutorials { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <nav class="row" style="margin-bottom: 1.25rem" aria-label="Principal">
+      <a href="../">← Inicio</a>
+      <a href="../assembler/">Ensamblador</a>
+      <a href="../editor/">Editor C/C++</a>
+      <a href="../manual.html">Manual</a>
+    </nav>
+    <div class="hero">
+      <h2>Grabación guiada, sin sorpresas</h2>
+      <p>Primero validamos el firmware, después abrimos el bootloader y recién entonces escribimos la flash de usuario. Si algo falla, el bootloader queda protegido para reintentar.</p>
+      <div class="flow" aria-label="Pasos de grabación">
+        <div class="flow-step"><strong>1</strong>Elige el firmware</div>
+        <div class="flow-step"><strong>2</strong>Conectá bootloader</div>
+        <div class="flow-step"><strong>3</strong>Escribe la flash</div>
+        <div class="flow-step"><strong>4</strong>Arrancá mouse</div>
+      </div>
+    </div>
+
+    <h1>Flasher WebUSB · Digispark ATtiny85</h1>
+    <p class="lead">
+      Graba el firmware en la placa desde Chrome, sin instalar nada: habla el protocolo
+      micronucleus por WebUSB. Valida el archivo antes de escribir y protege el bootloader
+      para poder reintentar si algo falla.
+    </p>
+
+    <section id="entorno">
+      <div id="entorno-estado" class="note">Comprobando el navegador…</div>
+    </section>
+
+    <section>
+      <h2>1 · Firmware</h2>
+      <div id="firmware-estado" class="note">Buscando <code>build/DigisparkMouse.ino.hex</code>…</div>
+      <dl class="kv" id="firmware-kv" hidden></dl>
+      <div class="row" style="margin-top: 0.9rem">
+        <button id="btn-build" type="button">Usar el firmware de ejemplo</button>
+        <label class="note" style="cursor: pointer">
+          o elige un archivo:
+          <input id="file" type="file" accept=".hex,.bin" />
+        </label>
+      </div>
+    </section>
+
+    <section>
+      <h2>2 · Grabación</h2>
+      <p class="note">
+        Pulsa <strong>Grabar</strong>: se abre el diálogo de Chrome (queda escuchando), desconecta la
+        placa y vuelve a conectarla; después selecciónala en la lista. El bootloader sólo escucha ~5 segundos
+        desde que la conectás.
+      </p>
+      <div class="row" style="margin-top: 0.9rem">
+        <button id="btn-flash" class="primary" type="button" disabled>Grabar en el ATtiny85</button>
+        <button id="btn-connect" type="button">Sólo conectar</button>
+        <button id="btn-forget" class="link" type="button">Olvidar permiso</button>
+      </div>
+      <dl class="kv" id="dispositivo-kv" hidden></dl>
+
+      <details>
+        <summary>Opciones avanzadas</summary>
+        <div class="row">
+          <label class="note" for="protocolo">Protocolo de escritura:</label>
+          <select id="protocolo">
+            <option value="auto">Automático (según la versión del bootloader)</option>
+            <option value="v2">Forzar v2 (palabras de 4 bytes)</option>
+            <option value="v1">Forzar v1 (página completa)</option>
+          </select>
+        </div>
+        <p class="note">
+          Si la grabación falla en la primera página con un timeout, prueba <strong>Forzar v2</strong>:
+          algunos clones baratos reportan una versión vieja pero hablan el protocolo nuevo.
+        </p>
+      </details>
+    </section>
+
+    <section>
+      <h2>Progreso</h2>
+      <div class="progreso-fila">
+        <span id="mensaje" class="note">Listo para empezar.</span>
+        <span class="pct mono" id="progreso-pct">0 %</span>
+      </div>
+      <div class="bar" id="progreso" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Avance de la grabación">
+        <div id="progreso-barra"></div>
+      </div>
+      <p class="progreso-detalle mono" id="progreso-detalle"></p>
+      <pre id="log" aria-live="polite"></pre>
+    </section>
+
+    <section aria-labelledby="pines-titulo">
+      <h2 id="pines-titulo">Pines de la placa</h2>
+      <figure class="pinmap3d" id="pinmap3d" aria-label="Mapa de pines de la Digispark" style="margin: 0.6rem 0 0">
+        <ul class="leyenda">
+          <li><i class="libre"></i> P0–P2 · libres (PWM)</li>
+          <li><i class="usb"></i> P3–P4 · USB</li>
+          <li><i class="reset"></i> P5 · RESET</li>
+        </ul>
+        <figcaption>P3/P4 son D± del USB: no los uses. P5 es RESET: como GPIO se pierde el bootloader.</figcaption>
+      </figure>
+      <p class="note" style="margin-top: 0.6rem">Toca un pin del mapa 3D — o enfócalo y usa las flechas — para ver para qué sirve cada uno.</p>
+    </section>
+
+    <section>
+      <h2>Tutoriales minuciosos</h2>
+      <div class="tutorials">
+        <details open>
+          <summary>A · Preparar y validar el firmware</summary>
+          <ol>
+            <li>Compila tu sketch en el <a href="../editor/">Editor</a> y pulsa <strong>Grabar compilado</strong>, o usa <strong>Elegir archivo</strong> para cargar un <code>.hex</code>/<code>.bin</code> que ya tengas (por ejemplo, el del <a href="../assembler/">Ensamblador</a>).</li>
+            <li>Esperá a que aparezca el tamaño y el vector de reset. Debe ser <code>jmp</code> o <code>rjmp</code>.</li>
+            <li>El límite de Digispark es 6012 bytes de flash de usuario; si se supera, el botón de grabar queda bloqueado.</li>
+            <li>No cierres esta pestaña durante el proceso: el log explica cada reenumeración USB.</li>
+          </ol>
+        </details>
+        <details>
+          <summary>B · Entrar al bootloader a tiempo</summary>
+          <ol>
+            <li>Usa Chrome o Edge de escritorio en <code>https://</code> o <code>localhost</code>. Safari y Firefox no sirven para WebUSB.</li>
+            <li>Preferí un puerto directo y un adaptador USB-C→USB-A pasivo; evitá hubs y docks.</li>
+            <li>Pulsa <strong>Grabar en el ATtiny85</strong> y deja abierto el diálogo del navegador.</li>
+            <li>Desconecta y conecta la placa mientras el diálogo escucha. Elige <code>16D0:0753</code> antes de que pasen aproximadamente 5 segundos.</li>
+          </ol>
+        </details>
+        <details>
+          <summary>C · Interpretar el progreso</summary>
+          <ol>
+            <li><strong>Borrando:</strong> sólo se borra la zona de usuario; micronucleus permanece intacto.</li>
+            <li><strong>Reenumerando:</strong> es normal que el dispositivo desaparezca y vuelva a aparecer.</li>
+            <li><strong>Grabando:</strong> no muevas ni desconectes la placa.</li>
+            <li><strong>Arrancando:</strong> el dispositivo deja de ser WebUSB y vuelve a aparecer como mouse HID.</li>
+          </ol>
+        </details>
+        <details>
+          <summary>D · Recuperarse de un error</summary>
+          <ul>
+            <li>Si el selector no muestra nada al comenzar, dejá la placa desconectada, pulsa <strong>Grabar</strong> y recién entonces conecta la placa; el bootloader sólo escucha unos 5 segundos.</li>
+            <li><strong>Si aparece “La placa no volvió a responder después del borrado”:</strong> el borrado sí se completó. No recargues la página ni vuelvas a iniciar otro flujo: dejá la placa desconectada, pulsa <strong>Grabar</strong> inmediatamente y enchúfala cuando Chrome esté esperando. El siguiente intento retoma la escritura y no vuelve a borrar.</li>
+            <li>Si falla la primera página, prueba <strong>Forzar v2</strong> en Opciones avanzadas.</li>
+            <li>En Windows, asigná WinUSB al dispositivo <code>16d0:0753</code> con Zadig. En Linux, instalá las reglas udev de micronucleus.</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <section>
+      <ul>
+        <li><strong>Chrome o Edge de escritorio</strong>, en <code>https://</code> o <code>localhost</code>, y abierto como página normal (no dentro de un webview).</li>
+        <li><strong>Sólo se puede grabar en modo bootloader.</strong> Con el firmware corriendo, la placa es un mouse HID y Chrome no da acceso a dispositivos HID.</li>
+        <li><strong>Después del borrado la placa se reenumera.</strong> El log lo muestra; si nunca vuelve, el bootloader sigue intacto (sólo se borra la flash de usuario). Dejá la placa desconectada, pulsa <strong>Grabar</strong> inmediatamente y vuelve a enchufarla cuando Chrome esté esperando: el próximo intento continúa con la escritura sin volver a borrar.</li>
+        <li><strong>Windows:</strong> Chrome necesita WinUSB para <code>16d0:0753</code>. Si aparece <em>Access denied</em>, apuntá ese dispositivo a WinUSB con <a href="https://zadig.akeo.ie/" rel="noreferrer noopener" target="_blank">Zadig</a> (el driver de Digistump/libusbK no sirve para WebUSB).</li>
+        <li><strong>Linux:</strong> hacen falta las mismas reglas udev que usa micronucleus (<code>49-micronucleus.rules</code>) para que Chrome pueda abrir el dispositivo.</li>
+        <li><strong>Puerto directo, sin hub ni dock.</strong> V-USB es bit-bang por software: detrás de un hub USB 3.x las escrituras se cortan a la mitad.</li>
+      </ul>
+    </section>
+
+    <footer style="display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: center; padding: 0.6rem 0 0; color: var(--muted); font-size: 0.85rem">
+      <span style="flex: 1">ATtiny85 Web Workbench · Flasher WebUSB</span>
+      <a href="../">Inicio</a>
+      <a href="../manual.html">Manual</a>
+      <a href="https://valedam.lat/" target="_blank" rel="noreferrer noopener">valedam.lat</a>
+      <a href="https://paypal.me/rdvt?locale.x=es_XC&country.x=MX" target="_blank" rel="noreferrer noopener">♡ Donar</a>
+    </footer>
+
+    <script type="module">
+      import { decodeFirmware, DIGISPARK_USER_FLASH } from "./intelhex.js";
+      import { MicronucleusFlasher, explainError, FASE_ETIQUETAS } from "./micronucleus.js";
+
+      // Dónde puede estar el .hex, según cómo se sirva el repo: la raíz del repo
+      // en localhost, o una página de proyecto en GitHub Pages (/<repo>/flasher/).
+      // Las dos formas resuelven igual desde acá porque el path es relativo.
+      const FIRMWARE_CANDIDATES = [
+        "../build/DigisparkMouse.ino.hex", // firmware de ejemplo dentro de build/
+        "./firmware/DigisparkMouse.ino.hex", // opción para un despliegue de subcarpeta
+        "./DigisparkMouse.ino.hex", // opción para copiarlo junto a la página
+      ];
+
+      const $ = (id) => document.getElementById(id);
+
+      /** @type {{image: Uint8Array, format: string, source: string}|null} */
+      let firmware = null;
+      let busy = false;
+
+      const flasher = new MicronucleusFlasher({ onLog: (line) => log(line) });
+
+      /* ------------------------------- interfaz ------------------------------ */
+
+      function log(line) {
+        const time = new Date().toLocaleTimeString("es-AR", { hour12: false });
+        const element = $("log");
+        element.textContent += `[${time}] ${line}\n`;
+        const lines = element.textContent.split("\n");
+        if (lines.length > 300) element.textContent = lines.slice(-300).join("\n");
+        element.scrollTop = element.scrollHeight;
+      }
+
+      function setMensaje(text, kind = "") {
+        const element = $("mensaje");
+        element.textContent = text;
+        element.className = `note ${kind}`;
+      }
+
+      /**
+       * Barra de progreso de la grabación.
+       *
+       * El avance sale del propio protocolo micronucleus: durante `writing` llegan
+       * los bytes realmente escritos y la página en curso, así que la barra refleja
+       * el trabajo hecho y no una estimación. Borrar y reenumerar son operaciones
+       * sin avance interno medible: ahí la barra pasa a modo indeterminado y el
+       * detalle indica por qué espera.
+       */
+      const progresoUI = {
+        porcentaje: 0,
+        arranque: 0,
+        detalle: "",
+        temporizador: null,
+
+        reiniciar() {
+          this.porcentaje = 0;
+          this.arranque = performance.now();
+          this.detalle = "";
+          $("progreso").className = "bar";
+          $("progreso-detalle").className = "progreso-detalle mono";
+          this.detener();
+          this.temporizador = window.setInterval(() => this.pintar(), 200);
+          this.pintar();
+        },
+
+        avanzar(p) {
+          if (!this.temporizador) this.reiniciar();
+          const porcentaje = Number(p?.percentage);
+          if (Number.isFinite(porcentaje)) this.porcentaje = Math.max(this.porcentaje, Math.min(100, porcentaje));
+          const barra = $("progreso");
+          barra.classList.toggle("indeterminado", p?.phase === "erasing" || p?.phase === "reconnecting");
+          this.detalle = this.describir(p);
+          setMensaje(FASE_ETIQUETAS[p?.phase] ?? p?.phase ?? "Grabando", p?.phase === "done" ? "ok" : "");
+          this.pintar();
+        },
+
+        /** Detalle con datos concretos de la fase, no un texto genérico. */
+        describir(p) {
+          const kb = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
+          if (p?.phase === "writing" && p.escrito && p.total) {
+            return `página ${p.pagina}/${p.paginas} · ${kb(p.escrito)} de ${kb(p.total)}`;
+          }
+          if (p?.phase === "reconnecting" && p.intentos) {
+            return `intento ${p.intento} de ${p.intentos} · la placa se reenumera al borrar`;
+          }
+          if (p?.phase === "erasing") return "una sola operación: puede tardar unos segundos";
+          if (p?.phase === "done" && p.total) return `${kb(p.total)} escritos y verificados`;
+          return "";
+        },
+
+        terminar(texto) {
+          this.porcentaje = 100;
+          this.detener();
+          $("progreso").className = "bar listo";
+          setMensaje(texto, "ok");
+          this.pintar();
+        },
+
+        fallar(texto) {
+          this.detener();
+          // La barra se queda donde llegó: dice hasta dónde se grabó.
+          $("progreso").className = "bar error";
+          $("progreso-detalle").className = "progreso-detalle mono error";
+          setMensaje(texto, "error");
+          this.pintar();
+        },
+
+        detener() {
+          window.clearInterval(this.temporizador);
+          this.temporizador = null;
+        },
+
+        pintar() {
+          const pct = Math.round(this.porcentaje);
+          const barra = $("progreso");
+          const indeterminado = barra.classList.contains("indeterminado");
+          $("progreso-barra").style.width = `${pct}%`;
+          $("progreso-pct").textContent = `${pct} %`;
+          if (indeterminado) barra.removeAttribute("aria-valuenow");
+          else barra.setAttribute("aria-valuenow", String(pct));
+          const partes = [this.detalle];
+          if (this.temporizador) partes.push(`${((performance.now() - this.arranque) / 1000).toFixed(1)} s`);
+          $("progreso-detalle").textContent = partes.filter(Boolean).join(" · ");
+        },
+      };
+
+      function setBusy(value) {
+        busy = value;
+        $("btn-flash").disabled = value || !firmware;
+        $("btn-connect").disabled = value;
+        $("btn-build").disabled = value;
+      }
+
+      function renderKv(target, entries) {
+        target.innerHTML = "";
+        for (const [key, value] of entries) {
+          if (value === null || value === undefined || value === "") continue;
+          const dt = document.createElement("dt");
+          dt.textContent = key;
+          const dd = document.createElement("dd");
+          if (value instanceof Node) dd.append(value);
+          else dd.textContent = String(value);
+          target.append(dt, dd);
+        }
+        target.hidden = entries.length === 0;
+      }
+
+      /* ------------------------------ firmware ------------------------------- */
+
+      /** Lee el vector de reset, que es lo que micronucleus necesita parchear. */
+      function describeResetVector(image) {
+        if (image.length < 4) return { ok: false, text: "imagen demasiado corta" };
+        const word0 = image[0] | (image[1] << 8);
+        const word1 = image[2] | (image[3] << 8);
+        if (word0 === 0x940c) return { ok: true, text: `jmp 0x${(word1 * 2).toString(16)}` };
+        if ((word0 & 0xf000) === 0xc000) {
+          return { ok: true, text: `rjmp a la palabra 0x${((word0 & 0x0fff) + 1).toString(16)}` };
+        }
+        return { ok: false, text: `0x${word0.toString(16).padStart(4, "0")} (no es jmp/rjmp)` };
+      }
+
+      function renderFirmware() {
+        if (!firmware) {
+          $("firmware-kv").hidden = true;
+          $("btn-flash").disabled = true;
+          return;
+        }
+
+        const { image, format, source } = firmware;
+        const vector = describeResetVector(image);
+        const limited = image.length > DIGISPARK_USER_FLASH;
+
+        $("firmware-estado").className = `note ${vector.ok && !limited ? "ok" : "warn"}`;
+        $("firmware-estado").textContent =
+          `${source}: ${image.length} bytes como ${format}, vectores de reset ` +
+          `${vector.ok ? "válidos" : "INVÁLIDOS"} (${vector.text}).` +
+          (limited ? ` Ojo: supera los ${DIGISPARK_USER_FLASH} bytes del espacio de usuario.` : "");
+
+        renderKv($("firmware-kv"), [
+          ["Origen", source],
+          ["Tamaño", `${image.length} bytes`],
+          ["Formato", format],
+          ["Vector de reset", vector.text],
+          ["Espacio de usuario", `${DIGISPARK_USER_FLASH} bytes (digispark-tiny)`],
+        ]);
+
+        $("btn-flash").disabled = busy || !vector.ok || limited;
+      }
+
+      function adoptFirmware(buffer, source) {
+        const { image, format } = decodeFirmware(buffer, source);
+        firmware = { image, format, source };
+        log(`Firmware cargado desde ${source}: ${image.length} bytes (${format}).`);
+        renderFirmware();
+      }
+
+      async function loadFromBuild() {
+        setMensaje("Buscando el .hex compilado…");
+
+        for (const url of FIRMWARE_CANDIDATES) {
+          try {
+            const response = await fetch(url, { cache: "no-store" });
+            if (!response.ok) continue;
+            adoptFirmware(await response.arrayBuffer(), url);
+            setMensaje("Firmware listo. Ahora graba con la placa en modo bootloader.", "ok");
+            return;
+          } catch {
+            // Probamos la próxima ruta candidata.
+          }
+        }
+
+        firmware = null;
+        renderFirmware();
+        $("firmware-estado").className = "note warn";
+        $("firmware-estado").textContent =
+          `No encontré el .hex en ninguna de estas rutas: ${FIRMWARE_CANDIDATES.join(", ")}. ` +
+          "Compila con ./flash.sh --compile-only (y sirve la raíz del repositorio), o elige el archivo a mano.";
+        setMensaje("Sin firmware cargado.", "warn");
+      }
+
+      /* ----------------------------- dispositivo ----------------------------- */
+
+      function renderDevice(info) {
+        if (!info) {
+          $("dispositivo-kv").hidden = true;
+          return;
+        }
+        renderKv($("dispositivo-kv"), [
+          ["Bootloader", `micronucleus ${info.major}.${info.minor}`],
+          ["Flash de usuario", `${info.flashSize} bytes`],
+          ["Página", `${info.pageSize} bytes`],
+          ["Páginas", info.pages],
+          ["Arranque del bootloader", `0x${info.bootloaderStart.toString(16)}`],
+          ["Delay de escritura", `${info.writeDelay} ms`],
+          ["Delay de borrado", `${Math.round(info.eraseDelay)} ms`],
+          ["Firma", info.signature ? info.signature.map((b) => b.toString(16).padStart(2, "0")).join(" ") : ""],
+          ["Versión de la app en la placa", info.appVersion !== null ? info.appVersion : ""],
+        ]);
+      }
+
+      async function conectar(mostrarMensaje = true) {
+        try {
+          const info = await flasher.requestDevice();
+          renderDevice(info);
+          log(`Conectado: micronucleus ${info.major}.${info.minor}, ${info.flashSize} bytes de usuario.`);
+          if (mostrarMensaje) setMensaje("Placa conectada. Ya puedes grabar.", "ok");
+          return true;
+        } catch (error) {
+          if (error instanceof DOMException && error.name === "NotFoundError") {
+            log("Diálogo cancelado sin elegir dispositivo.");
+            return false;
+          }
+          renderDevice(null);
+          setMensaje(explainError(error), "error");
+          log(`ERROR al conectar: ${explainError(error)}`);
+          return false;
+        }
+      }
+
+      /**
+       * Reconexión silenciosa: si el origen ya tiene permiso y la placa está
+       * escuchando, conectamos sin abrir el diálogo (no gasta el gesto del click).
+       */
+      async function conectarSiHayPermiso() {
+        try {
+          const info = await flasher.connectGranted();
+          if (!info) return false;
+          renderDevice(info);
+          log(`Placa ya autorizada: micronucleus ${info.major}.${info.minor}.`);
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      async function grabar() {
+        setBusy(true);
+        progresoUI.reiniciar();
+        try {
+          if (!flasher.connected && !(await conectarSiHayPermiso())) {
+            // El requestDevice tiene que salir dentro del gesto del click.
+            const info = await flasher.requestDevice();
+            renderDevice(info);
+            log(`Conectado: micronucleus ${info.major}.${info.minor}, ${info.flashSize} bytes de usuario.`);
+          }
+
+          progresoUI.avanzar({ phase: "connecting", percentage: 2 });
+          await flasher.flash(firmware.image, {
+            protocol: $("protocolo").value,
+            onProgress: (p) => progresoUI.avanzar(p),
+          });
+          log("Grabación terminada. La placa se reenumera como mouse.");
+          progresoUI.terminar("Grabado: el firmware ya está en la placa.");
+        } catch (error) {
+          // Tras un fallo la placa puede haber quedado a medio borrar o haberse
+          // reenumerado: soltamos el handle para que el próximo intento reconecte.
+          await flasher.close();
+          const text = explainError(error);
+          log(`ERROR: ${text}`);
+          progresoUI.fallar(text);
+        } finally {
+          renderDevice(flasher.info);
+          setBusy(false);
+        }
+      }
+
+      /* ------------------------------- arranque ------------------------------ */
+
+      function comprobarEntorno() {
+        const compatible = typeof navigator !== "undefined" && "usb" in navigator;
+        const seguro = window.isSecureContext;
+        const element = $("entorno-estado");
+
+        if (compatible && seguro) {
+          element.className = "note ok";
+          element.textContent = "WebUSB disponible en un contexto seguro. Listo para grabar.";
+          return;
+        }
+
+        element.className = "note error";
+        const problemas = [];
+        if (!compatible) problemas.push("este navegador no tiene WebUSB (usa Chrome o Edge de escritorio)");
+        if (!seguro) problemas.push("la página no está en un contexto seguro (necesita https:// o localhost)");
+        element.textContent = `No se puede grabar: ${problemas.join(" y ")}.`;
+      }
+
+      $("btn-build").addEventListener("click", loadFromBuild);
+
+      $("file").addEventListener("change", async (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        try {
+          adoptFirmware(await file.arrayBuffer(), file.name);
+          setMensaje("Firmware listo. Ahora graba con la placa en modo bootloader.", "ok");
+        } catch (error) {
+          firmware = null;
+          renderFirmware();
+          setMensaje(error.message, "error");
+          log(`ERROR al leer ${file.name}: ${error.message}`);
+        }
+      });
+
+      $("btn-connect").addEventListener("click", () => conectar());
+
+      $("btn-forget").addEventListener("click", async () => {
+        const devices = (await navigator.usb.getDevices()).filter(
+          (d) => d.vendorId === flasher.vendorId && d.productId === flasher.productId,
+        );
+        for (const device of devices) await device.forget();
+        renderDevice(null);
+        log(`Permisos olvidados para ${devices.length} dispositivo(s) 16d0:0753.`);
+        setMensaje("Permiso olvidado: la próxima grabación vuelve a mostrar el diálogo.");
+      });
+
+      $("btn-flash").addEventListener("click", grabar);
+
+      comprobarEntorno();
+      log("Página cargada. Cargando firmware compilado…");
+      await loadFromBuild();
+      await conectarSiHayPermiso();
+    </script>
+
+    <script type="module">
+      // Mapa de pines 3D: el mismo componente que usa el editor. Si no hay
+      // WebGL2 (o falla), queda la leyenda estática de la tarjeta.
+      import { iniciarPinmap3D } from "../editor/pinmap-3d.js";
+
+      const contenedorPinmap = document.getElementById("pinmap3d");
+      if (contenedorPinmap) {
+        const enIdle =
+          typeof requestIdleCallback === "function"
+            ? (fn) => requestIdleCallback(fn, { timeout: 1200 })
+            : (fn) => setTimeout(fn, 200);
+        enIdle(async () => {
+          const resultado = await iniciarPinmap3D(contenedorPinmap);
+          if (resultado) contenedorPinmap.dataset.estado = "listo";
+        });
+      }
+    </script>
+  </body>
+</html>

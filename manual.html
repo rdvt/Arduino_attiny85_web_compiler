@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Manual de uso del banco de trabajo web ATtiny85 y Digispark: ensamblador, editor C/C++ con compilador en el navegador y grabador WebUSB.">
+  <title>Manual · ATtiny85 Web Workbench</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232ba6ff'/%3E%3Ctext x='16' y='22' font-family='sans-serif' font-size='15' font-weight='bold' text-anchor='middle' fill='%230a1622'%3EA8%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./theme.css">
+  <style>
+    /* El sistema de diseño vive en `theme.css` (design.md §3). Aquí sólo se
+       mapean los nombres propios del manual a los tokens compartidos;
+       `--bg`, `--line` y `--text` vienen de theme.css. */
+    :root { color-scheme:dark; --panel:var(--surface); --panel2:var(--surface-2); --muted:var(--text-3); --blue:var(--brand); --blue2:var(--brand-hover); --cyan:var(--info); --orange:var(--warn); --red:var(--danger); }
+    * { box-sizing:border-box; } body { margin:0; background:var(--bg); color:var(--text); font:15px/1.65 var(--font-sans); }
+    /* Esta página define su propio layout: se anulan los estilos base de
+       paneles de theme.css para no alterarlo. */
+    .card { display:block; }
+    a { color:var(--blue); } code,pre,.mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; } code { color:var(--cyan); }
+    .shell { width:min(1180px,calc(100% - 2rem)); margin:auto; } header { min-height:var(--header-h); display:flex; align-items:center; gap:1rem; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:var(--z-sticky); background:rgba(23,23,25,.72); backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); }.brand { flex:1; display:flex; align-items:center; gap:.7rem; }.logo { display:grid; place-items:center; width:38px; height:38px; border-radius:var(--r-md); color:var(--brand-ink); background:var(--blue); font-weight:900; }.brand strong,.brand small { display:block; }.brand small { color:var(--muted); font-size:11px; }nav { display:flex; gap:1rem; }nav a { color:var(--muted); text-decoration:none; font-size:13px; }nav a:hover { color:var(--text); }
+    .layout { display:grid; grid-template-columns:250px minmax(0,1fr); gap:2rem; }.toc { position:sticky; top:1rem; align-self:start; padding:1rem 0; }.toc h2 { color:var(--text); font-size:.85rem; text-transform:uppercase; letter-spacing:.1em; }.toc a { display:block; padding:.35rem .6rem; border-left:2px solid transparent; color:var(--muted); text-decoration:none; font-size:.88rem; }.toc a:hover { color:var(--text); border-color:var(--blue); background:var(--brand-soft); }
+    main { padding:3rem 0 5rem; }.eyebrow { color:var(--blue); font:11px ui-monospace,monospace; letter-spacing:.15em; }.hero h1 { margin:.3rem 0 .6rem; font-size:clamp(2rem,5vw,3.7rem); line-height:1.05; letter-spacing:-.05em; }.hero p { color:var(--muted); max-width:70ch; font-size:1.05rem; }.badge { display:inline-block; margin-top:.7rem; padding:.3rem .6rem; border:1px solid var(--brand-line); border-radius:var(--r-full); color:var(--blue); font-family:var(--font-label); font-size:11px; letter-spacing:1px; }
+    section { scroll-margin-top:1rem; margin:2.5rem 0; }.section-head { display:flex; gap:.7rem; align-items:baseline; border-bottom:1px solid var(--line); padding-bottom:.55rem; }.section-head h2 { margin:0; font-size:1.45rem; }.section-head span { color:var(--blue); font:12px ui-monospace,monospace; }.card { padding:1rem 1.1rem; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); }.grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.8rem; }.grid h3 { margin:.1rem 0 .3rem; font-size:1rem; }.grid p,.card li { color:var(--muted); }.steps { counter-reset:step; display:grid; gap:.7rem; }.step { position:relative; padding:1rem 1rem 1rem 3.2rem; background:var(--panel); border:1px solid var(--line); border-radius:10px; }.step::before { counter-increment:step; content:counter(step); position:absolute; left:1rem; top:1rem; display:grid; place-items:center; width:1.5rem; height:1.5rem; border-radius:50%; background:var(--blue); color:var(--brand-ink); font-weight:800; }.step strong { display:block; margin-bottom:.2rem; }.step p { margin:0; color:var(--muted); }
+    pre { padding:.9rem; overflow:auto; color:var(--text-2); background:#101013; border:1px solid var(--line); border-radius:var(--r-md); font-size:12px; }.callout { padding:1rem 1.1rem; border-left:3px solid var(--blue); background:var(--info-soft); color:var(--muted); }.callout.warn { border-color:var(--orange); background:var(--warn-soft); }.callout strong { color:var(--text); }.table-wrap { overflow:auto; }.table { width:100%; border-collapse:collapse; }.table th,.table td { padding:.65rem; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }.table th { color:var(--blue); font-size:.8rem; text-transform:uppercase; }.table td { color:var(--muted); }.faq details { padding:.8rem 0; border-bottom:1px solid var(--line); }.faq summary { cursor:pointer; font-weight:650; }.faq p { color:var(--muted); }
+    footer { padding:2rem 0 4rem; color:var(--muted); border-top:1px solid var(--line); font-size:13px; }
+    @media (max-width:800px) { .layout { display:block; }.toc { position:static; border-bottom:1px solid var(--line); }.toc a { display:inline-block; margin-right:.4rem; }.grid { grid-template-columns:1fr; }nav { display:none; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div class="brand"><span class="logo">A8</span><div><strong>ATtiny85 Web Workbench</strong><small>Manual de uso</small></div></div>
+      <nav><a href="./">Inicio</a><a href="./assembler/">Ensamblador</a><a href="./editor/">Editor</a><a href="./flasher/">Flasher</a></nav>
+    </header>
+    <main>
+      <div class="layout">
+        <aside class="toc">
+          <h2>Contenido</h2>
+          <a href="#inicio">Qué incluye</a>
+          <a href="#flujo">Flujo completo</a>
+          <a href="#requisitos">Qué necesitas</a>
+          <a href="#ensamblador">Ensamblador</a>
+          <a href="#editor">Editor C/C++</a>
+          <a href="#compilador">Compilador en el navegador</a>
+          <a href="#flasher">Grabar la placa</a>
+          <a href="#problemas">Problemas frecuentes</a>
+          <a href="#ejemplos">Ejemplos de desarrollo</a>
+          <a href="#publicar">Publicar este sitio</a>
+          <a href="#apoyo">Apoya el proyecto</a>
+        </aside>
+        <article>
+
+          <section id="inicio" class="hero">
+            <p class="eyebrow">MANUAL DE USO</p>
+            <h1>Construye y graba firmware para ATtiny85.</h1>
+            <p>Este sitio reúne tres herramientas que funcionan dentro del navegador: un ensamblador AVR, un editor de C/C++ con compilador ATtiny85 incluido y un grabador WebUSB para Digispark. No hay que instalar ningún programa ni compilador: solo abrir la página.</p>
+            <span class="badge">Todo funciona en el navegador · sin instalaciones · sin cuenta · sin servidor propio</span>
+          </section>
+
+          <section id="flujo">
+            <div class="section-head"><span>01</span><h2>Flujo completo</h2></div>
+            <div class="steps">
+              <div class="step"><strong>Escribe o carga el código</strong><p>Usa el ensamblador si quieres escribir AVR directamente, o el editor si prefieres un sketch de estilo Arduino en C/C++.</p></div>
+              <div class="step"><strong>Compila</strong><p>El editor compila C/C++ para ATtiny85 en tu navegador. El ensamblador traduce tu programa a Intel HEX al instante.</p></div>
+              <div class="step"><strong>Revisa el resultado</strong><p>El sitio te dice cuánta flash usas (el máximo es 6012 bytes) y si el firmware podrá arrancar en la Digispark.</p></div>
+              <div class="step"><strong>Graba la placa</strong><p>Conecta la Digispark en Chrome o Edge, elige el dispositivo y espera a que termine la escritura.</p></div>
+            </div>
+          </section>
+
+          <section id="requisitos">
+            <div class="section-head"><span>02</span><h2>Qué necesitas</h2></div>
+            <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th>Herramienta</th><th>Necesitas</th><th>Notas</th></tr></thead>
+                <tbody>
+                  <tr><td>Ensamblador</td><td>Cualquier navegador moderno</td><td>No usa red ni servicios externos: funciona incluso sin conexión.</td></tr>
+                  <tr><td>Editor y compilación</td><td>Cualquier navegador moderno</td><td>La primera compilación descarga el compilador (unos 20 MB) y después queda guardado en la caché del navegador.</td></tr>
+                  <tr><td>Grabar la placa</td><td>Chrome o Edge de escritorio</td><td>WebUSB no existe en Safari ni en Firefox. Hace falta HTTPS o <code>localhost</code>.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="callout"><strong>ATtiny85 y Digispark de un vistazo:</strong> 8 KB de flash, de los que <strong>6012 bytes</strong> quedan para tu programa (el resto es el bootloader micronucleus), y 512 bytes de RAM. El reloj es un oscilador RC interno calibrado a 16,5 MHz, así que no se necesita cristal. Los pines <code>P3</code> y <code>P4</code> los usa el USB por software: quedan libres <code>P0</code>, <code>P1</code>, <code>P2</code> y <code>P5</code>.</div>
+          </section>
+
+          <section id="ensamblador">
+            <div class="section-head"><span>03</span><h2>Ensamblador</h2></div>
+            <p>Escribes instrucciones AVR y obtienes el firmware. Resuelve etiquetas, valida las instrucciones y avisa de los errores antes de generar nada.</p>
+            <div class="card">
+              <h3>Programa mínimo, paso a paso</h3>
+              <p>El ATtiny85 empieza a ejecutar en la dirección 0. Este ejemplo enciende un LED en el pin P0 y se queda encendido en un bucle:</p>
+              <pre>.device attiny85
+.equ DDRB = 0x17
+.equ PORTB = 0x18
+
+.org 0
+rjmp reset
+
+reset:
+  ldi r16, 0x01
+  out DDRB, r16
+loop:
+  out PORTB, r16
+  rjmp loop</pre>
+              <ol>
+                <li>Abre el <a href="./assembler/">Ensamblador</a>.</li>
+                <li>Elige el destino <strong>Digispark</strong> si vas a grabar con el bootloader micronucleus: eso limita el programa a 6012 bytes.</li>
+                <li>Pulsa <strong>Ensamblar</strong>. Verás el tamaño, los símbolos y el Intel HEX.</li>
+                <li>Descarga el <code>.hex</code> o el binario y pásalo al <a href="./flasher/">Flasher</a>.</li>
+              </ol>
+            </div>
+            <div class="callout"><strong>Direcciones:</strong> las etiquetas y <code>.org</code> usan direcciones de byte. Casi todas las instrucciones ocupan 2 bytes; <code>JMP</code>, <code>CALL</code>, <code>LDS</code> y <code>STS</code> ocupan 4. Los saltos relativos se calculan en una segunda pasada.</div>
+            <div class="callout"><strong>Directivas admitidas:</strong> <code>.org</code>, <code>.byte</code>, <code>.word</code>, <code>.dword</code>, <code>.ascii</code>, <code>.asciz</code>, <code>.fill</code>, <code>.align</code>, <code>.equ</code>, <code>.set</code> y <code>.def</code>. Las expresiones aceptan <code>+ - * / % &lt;&lt; &gt;&gt; &amp; | ^ ~</code>, paréntesis y funciones como <code>low()</code> o <code>high()</code>. Las instrucciones que el ensamblador no implementa se rechazan: nunca se genera una palabra incorrecta en silencio.</div>
+          </section>
+
+          <section id="editor">
+            <div class="section-head"><span>04</span><h2>Editor C/C++</h2></div>
+            <p>El editor trabaja con sketches de estilo Arduino. Trae resaltado, numeración, pestañas, diagnóstico de reglas propias de ATtiny85 y el compilador del navegador.</p>
+            <div class="grid">
+              <div class="card"><h3>Editar</h3><p>Abre el ejemplo publicado, un archivo local o crea pestañas nuevas con <strong>+ archivo</strong>. El diagnóstico se actualiza mientras escribes y marca cosas como usar <code>Serial</code> (el ATtiny85 no tiene puerto serie) o <code>delay()</code> en un sketch de ratón USB.</p></div>
+              <div class="card"><h3>Compilar</h3><p>Pulsa <strong>Compilar</strong> o <kbd>Ctrl/⌘ + Enter</kbd>. La barra muestra la flash usada y el panel separa errores y advertencias. Haz clic en un error para saltar a su línea.</p></div>
+              <div class="card"><h3>Configurar un ratón</h3><p>Si el sketch incluye <code>DigiMouse.h</code> aparece un panel para ajustar los valores del recorrido, con previsualización y presets que se aplican al código.</p></div>
+              <div class="card"><h3>Descargar</h3><p><strong>Guardar</strong> descarga el archivo fuente a tu equipo. Desde ahí puedes pegarlo donde quieras; no se sube a ningún servidor.</p></div>
+            </div>
+            <div class="callout warn"><strong>Importante:</strong> un sketch debe tener <code>void setup()</code> y <code>void loop()</code>, y no puede definir su propio <code>main()</code> (ya lo pone el core). El firmware grabable debe empezar con <code>jmp</code> o <code>rjmp</code>, porque micronucleus parchea el vector de reset.</div>
+          </section>
+
+          <section id="compilador">
+            <div class="section-head"><span>05</span><h2>Compilador en el navegador</h2></div>
+            <p>El compilador C/C++ de ATtiny85 corre dentro de la página con WebAssembly. No se instala nada en tu equipo y no se envía tu código a ningún servidor: la página descarga el compilador y lo ejecuta en tu propio navegador.</p>
+            <div class="grid">
+              <div class="card"><h3>Qué compila</h3><p>Objetivo <code>digistump:avr:digispark-tiny</code>: ATtiny85, arquitectura <code>avr25</code>, <code>F_CPU</code> de 16,5 MHz y 6012 bytes de flash de usuario. Incluye el core Digispark y sus librerías: alcanza con <code>#include &lt;DigiUSB.h&gt;</code> y el compilador busca la librería y compila sus fuentes por vos (DigiUSB, DigiKeyboard, DigiJoystick, Wire, SPI, TinyWireM, OneWire…).</p></div>
+              <div class="card"><h3>Qué esperar</h3><p>La primera compilación descarga unos 20 MB y puede tardar unos segundos; las siguientes son cuestión de décimas de segundo porque todo queda en la caché del navegador. Mientras compila puedes seguir moviéndote por la página: el trabajo ocurre en un hilo aparte.</p></div>
+              <div class="card"><h3>Qué genera</h3><p>El resultado es un Intel HEX listo para el flasher, y el del ejemplo del mouse es idéntico al que produciría la cadena oficial de Arduino para esta placa.</p></div>
+              <div class="card"><h3>Cuándo no funciona</h3><p>Si el módulo WebAssembly no carga (navegador muy antiguo o descarga bloqueada), el editor te lo indica. El ensamblador y el flasher siguen funcionando igual.</p></div>
+            </div>
+          </section>
+
+          <section id="flasher">
+            <div class="section-head"><span>06</span><h2>Grabar la placa</h2></div>
+            <p>El grabador valida el firmware antes de tocar la placa —tamaño, checksum y vector de arranque— y protege el bootloader durante la operación.</p>
+            <div class="card">
+              <ol>
+                <li>Abre el <a href="./flasher/">Flasher WebUSB</a> en Chrome o Edge de escritorio.</li>
+                <li>Selecciona tu <code>.hex</code> o <code>.bin</code>. También puedes usar el ejemplo publicado para probar.</li>
+                <li>Pulsa <strong>Grabar en el ATtiny85</strong>. Chrome quedará esperando el dispositivo.</li>
+                <li><strong>Desconecta y vuelve a conectar la Digispark</strong>: el bootloader solo atiende unos 5 segundos al conectar.</li>
+                <li>Elige el dispositivo <code>16D0:0753</code> en el selector.</li>
+                <li>No desconectes la placa mientras se borra o se escribe la flash.</li>
+              </ol>
+            </div>
+            <div class="callout warn"><strong>Requisitos:</strong> WebUSB no funciona en Safari ni en Firefox, y necesita HTTPS o <code>localhost</code>. Usa un puerto USB directo, sin hub ni dock. En Windows puede hacer falta asignar WinUSB al dispositivo con Zadig.</div>
+            <div class="callout warn"><strong>Si aparece “La placa no volvió a responder después del borrado”:</strong> el borrado sí se completó y el bootloader está intacto. No recargues la página. Dejá la placa desconectada, pulsa <strong>Grabar</strong> —o <strong>Grabar compilado</strong> en el editor— inmediatamente y enchúfala recién cuando Chrome esté esperando. El siguiente intento retoma la escritura sin volver a borrar.</div>
+          </section>
+
+          <section id="problemas" class="faq">
+            <div class="section-head"><span>07</span><h2>Problemas frecuentes</h2></div>
+            <details open><summary>No aparece la placa en el selector</summary><p>La placa tiene que estar en modo bootloader: pulsa Grabar <em>primero</em>, y recién entonces desconecta y vuelve a conectar la Digispark. Tienes unos 5 segundos para elegirla. Prueba con otro cable y con un puerto USB directo.</p></details>
+            <details><summary>El borrado terminó, pero aparece “La placa no volvió a responder”</summary><p>Es un caso recuperable: el borrado de la flash de usuario sí terminó y el bootloader no se tocó. Dejá la placa desconectada, pulsa <strong>Grabar compilado</strong> inmediatamente y enchúfala cuando Chrome esté esperando. El segundo intento conserva el estado de borrado y continúa directamente con la escritura; no vuelve a borrar.</p></details>
+            <details><summary>El botón de grabar está bloqueado</summary><p>El firmware está vacío, supera los 6012 bytes o no empieza con <code>jmp</code>/<code>rjmp</code>. El panel de validación indica cuál de los tres casos es. Si el programa es demasiado grande, reduce el sketch.</p></details>
+            <details><summary>La compilación falla en la primera línea con «Arduino.h no encontrado»</summary><p>Falta descargar los recursos del compilador. Comprueba que la primera compilación haya terminado sin cortar la conexión y vuelve a intentar; el navegador guarda los archivos y no los vuelve a pedir.</p></details>
+            <details><summary>Compila, pero el firmware no hace nada al grabar</summary><p>Revisa que el destino sea <strong>Digispark</strong> (6012 bytes) y que no uses los pines <code>P3</code> ni <code>P4</code>: están ocupados por el USB por software. Si el sketch usa <code>DigiMouse</code>, recuerda llamar a <code>DigiMouse.begin()</code>.</p></details>
+            <details><summary>La placa no se reenumera después de grabar</summary><p>Es normal que la Digispark desaparezca y vuelva a aparecer como ratón o teclado HID: es el programa que acabas de grabar. Para grabar otra vez, repite el paso de reconectar la placa con el selector abierto.</p></details>
+            <details><summary>¿Se puede usar sin internet?</summary><p>El ensamblador sí, porque no usa red. El editor necesita la primera descarga del compilador; después funciona con la caché del navegador. El flasher no usa red en absoluto.</p></details>
+          </section>
+
+          <section id="ejemplos">
+            <div class="section-head"><span>08</span><h2>Ejemplos de desarrollo</h2></div>
+            <p>Todos los ejemplos compilan en el <a href="./editor/">editor C/C++</a> o en el <a href="./assembler/">ensamblador</a> y caben en los 6012 bytes de la Digispark. Copia, pega, compila y graba.</p>
+            <div class="callout"><strong>Cómo usarlos:</strong> abre el editor, borra el sketch de ejemplo, pega el código y pulsa <code>Compilar</code>. Los ejemplos de ensamblador van en el ensamblador con la placa <strong>Digispark</strong> elegida.</div>
+
+            <h3 style="margin-top:1.4rem">Básicos: LED y GPIO</h3>
+            <div class="grid">
+              <div class="card"><h3>Blink (LED integrado)</h3><p>El clásico parpadeo en P1, donde la Digispark trae su LED.</p><pre>void setup() {
+  pinMode(1, OUTPUT);
+}
+void loop() {
+  digitalWrite(1, HIGH);
+  delay(500);
+  digitalWrite(1, LOW);
+  delay(500);
+}</pre></div>
+              <div class="card"><h3>Botón + LED</h3><p>Lee un botón en P0 con pull-up y enciende el LED de P1.</p><pre>void setup() {
+  pinMode(0, INPUT_PULLUP);
+  pinMode(1, OUTPUT);
+}
+void loop() {
+  bool presionado = digitalRead(0) == LOW;
+  digitalWrite(1, presionado);
+  delay(10);
+}</pre></div>
+              <div class="card"><h3>LED respirando (PWM)</h3><p>Fade suave usando PWM por hardware en P0 o P1.</p><pre>void setup() {
+  pinMode(1, OUTPUT);
+}
+void loop() {
+  for (int i = 0; i &lt;= 255; i += 5) {
+    analogWrite(1, i);
+    delay(8);
+  }
+  for (int i = 255; i &gt;= 0; i -= 5) {
+    analogWrite(1, i);
+    delay(8);
+  }
+}</pre></div>
+              <div class="card"><h3>SOS morse</h3><p>Parpadea SOS en el LED integrado: tres cortos, tres largos, tres cortos.</p><pre>const int LED = 1;
+
+void punto()  { digitalWrite(LED, HIGH); delay(120); digitalWrite(LED, LOW); delay(120); }
+void raya()   { digitalWrite(LED, HIGH); delay(360); digitalWrite(LED, LOW); delay(120); }
+
+void setup() { pinMode(LED, OUTPUT); }
+void loop() {
+  punto(); punto(); punto();
+  raya();  raya();  raya();
+  punto(); punto(); punto();
+  delay(1500);
+}</pre></div>
+            </div>
+
+            <h3 style="margin-top:1.4rem">Analógicos y PWM</h3>
+            <div class="grid">
+              <div class="card"><h3>Lectura analógica</h3><p>Lee un potenciómetro en P2 (ADC1) y ajusta el brillo del LED.</p><pre>void setup() {
+  pinMode(1, OUTPUT);
+}
+void loop() {
+  int valor = analogRead(A1);   // P2
+  analogWrite(1, valor / 4);    // 0..1023 → 0..255
+  delay(20);
+}</pre></div>
+              <div class="card"><h3>Luz nocturna (LDR)</h3><p>Enciende el LED sólo cuando oscurece, con una fotorresistencia en P2.</p><pre>void setup() {
+  pinMode(1, OUTPUT);
+}
+void loop() {
+  bool oscuro = analogRead(A1) &lt; 300;
+  digitalWrite(1, oscuro);
+  delay(100);
+}</pre></div>
+              <div class="card"><h3>Servo básico</h3><p>Mueve un servo en P1 usando pulsos de 1000–2000 µs.</p><pre>void setup() {
+  pinMode(1, OUTPUT);
+}
+void pulso(int micros) {
+  digitalWrite(1, HIGH);
+  delayMicroseconds(micros);
+  digitalWrite(1, LOW);
+}
+void loop() {
+  for (int pos = 1000; pos &lt;= 2000; pos += 10) {
+    pulso(pos);
+    delay(20);
+  }
+}</pre></div>
+              <div class="card"><h3>Termistor NTC</h3><p>Aproxima la temperatura con un NTC en P2 y enciende aviso si pasa 30 °C.</p><pre>void setup() {
+  pinMode(1, OUTPUT);
+}
+void loop() {
+  int lectura = analogRead(A1);
+  // NTC 10k con divisor a 5V: valor alto = más temperatura
+  bool caliente = lectura &gt; 550;
+  digitalWrite(1, caliente);
+  delay(500);
+}</pre></div>
+            </div>
+
+            <h3 style="margin-top:1.4rem">Comunicación USB (DigiKeyboard/DigiUSB)</h3>
+            <div class="grid">
+              <div class="card"><h3>DigiKeyboard: hola mundo</h3><p>Escribe un mensaje cada 10 segundos como teclado USB.</p><pre>#include &lt;DigiKeyboard.h&gt;
+
+void setup() { }
+void loop() {
+  DigiKeyboard.sendKeyStroke(0);
+  DigiKeyboard.print("Hola desde ATtiny85");
+  DigiKeyboard.delay(10000);
+}</pre></div>
+              <div class="card"><h3>Contraseñita rápida</h3><p>Escribe una cadena y presiona Enter (útil para autologin de prueba).</p><pre>#include &lt;DigiKeyboard.h&gt;
+
+void setup() { }
+void loop() {
+  DigiKeyboard.sendKeyStroke(0);
+  DigiKeyboard.print("mi-contrasena-de-prueba");
+  DigiKeyboard.sendKeyStroke(KEY_ENTER);
+  DigiKeyboard.delay(30000);
+}</pre></div>
+              <div class="card"><h3>DigiUSB: eco</h3><p>Recibe un byte por DigiUSB y lo devuelve (requiere la app de escritorio).</p><pre>#include &lt;DigiUSB.h&gt;
+
+void setup() { DigiUSB.begin(); }
+void loop() {
+  if (DigiUSB.available()) {
+    DigiUSB.write(DigiUSB.read());  // eco
+  }
+  DigiUSB.refresh();
+}</pre></div>
+              <div class="card"><h3>Notas musicales</h3><p>Genera tonos en P1 con tone() (el LED integrado suena poco: usa un buzzer).</p><pre>const int BUZZER = 1;
+
+void setup() { pinMode(BUZZER, OUTPUT); }
+void nota(int frec, int ms) {
+  tone(BUZZER, frec, ms);
+  delay(ms * 1.3);
+}
+void loop() {
+  nota(262, 300);  // DO
+  nota(294, 300);  // RE
+  nota(330, 300);  // MI
+  nota(349, 300);  // FA
+  nota(392, 500);  // SOL
+  delay(1000);
+}</pre></div>
+            </div>
+
+            <h3 style="margin-top:1.4rem">Mouse USB con DigiMouse</h3>
+            <div class="grid">
+              <div class="card"><h3>Mouse jiggler</h3><p>Mueve el cursor un píxel cada 20 ms para evitar el bloqueo por inactividad.</p><pre>#include &lt;DigiMouse.h&gt;
+
+void setup() { DigiMouse.begin(); }
+void loop() {
+  DigiMouse.moveX(1);
+  DigiMouse.delay(20);
+  DigiMouse.moveX(-1);
+  DigiMouse.delay(20000);
+}</pre></div>
+              <div class="card"><h3>Círculo completo</h3><p>Mueve el cursor en círculos pequeños usando seno y coseno.</p><pre>#include &lt;DigiMouse.h&gt;
+
+void setup() { DigiMouse.begin(); }
+void loop() {
+  for (int grados = 0; grados &lt; 360; grados += 10) {
+    float rad = grados * 3.14159 / 180.0;
+    char dx = (char)(cos(rad) * 5.0);
+    char dy = (char)(sin(rad) * 5.0);
+    DigiMouse.move(dx, dy, 0);
+    DigiMouse.delay(20);
+  }
+}</pre></div>
+              <div class="card"><h3>Clic cada minuto</h3><p>Simula presencia con un clic (usa setButtons, no leftClick()).</p><pre>#include &lt;DigiMouse.h&gt;
+
+// Máscaras de botones: 1=izquierdo, 2=derecho, 4=central
+void clic() {
+  DigiMouse.setButtons(1);
+  DigiMouse.delay(20);
+  DigiMouse.setButtons(0);
+  DigiMouse.delay(20);
+}
+
+void setup() { DigiMouse.begin(); }
+void loop() {
+  clic();
+  DigiMouse.delay(60000);
+}</pre></div>
+              <div class="card"><h3>Mouse + teclado juntos</h3><p>NO se pueden mezclar: elige uno. Este ejemplo documenta el error típico.</p><pre>// ERROR común: los dos definen el mismo descriptor USB.
+// #include &lt;DigiMouse.h&gt;    // elige mouse...
+// #include &lt;DigiKeyboard.h&gt; // ...o teclado, pero no ambos.
+// El editor te avisa si intentas usar los dos.
+#include &lt;DigiMouse.h&gt;
+
+void setup() { DigiMouse.begin(); }
+void loop() {
+  DigiMouse.move(3, 0, 0);
+  DigiMouse.delay(20);
+  DigiMouse.move(-3, 0, 0);
+  DigiMouse.delay(20);
+}</pre></div>
+            </div>
+
+            <h3 style="margin-top:1.4rem">Ensamblador AVR</h3>
+            <div class="grid">
+              <div class="card"><h3>LED parpadeando</h3><p>El blink en assembler puro, listo para el ensamblador del sitio.</p><pre>.device attiny85
+.equ DDRB = 0x17
+.equ PORTB = 0x18
+.org 0
+rjmp inicio
+inicio:
+  ldi r16, 2      ; P1 como salida
+  out DDRB, r16
+bucle:
+  ldi r16, 2
+  out PORTB, r16  ; LED on
+  ldi r17, 30
+  rcall pausa
+  ldi r16, 0
+  out PORTB, r16  ; LED off
+  ldi r17, 30
+  rcall pausa
+  rjmp bucle
+pausa:
+  ldi r18, 0
+pausa2:
+  dec r18
+  brne pausa2
+  dec r17
+  brne pausa
+  ret</pre></div>
+              <div class="card"><h3>Contador binario en P0..P2</h3><p>Cuenta 0..7 en tres LEDs conectados a P0, P1 y P2.</p><pre>.device attiny85
+.equ DDRB = 0x17
+.equ PORTB = 0x18
+.org 0
+rjmp inicio
+inicio:
+  ldi r16, 0b00000111
+  out DDRB, r16   ; P0..P2 salidas
+  ldi r17, 0      ; contador
+bucle:
+  out PORTB, r17
+  ldi r18, 25
+  rcall pausa
+  inc r17
+  andi r17, 0x07
+  rjmp bucle
+pausa:
+  ldi r19, 0
+pausa2:
+  dec r19
+  brne pausa2
+  dec r18
+  brne pausa
+  ret</pre></div>
+              <div class="card"><h3>Lectura de botón (PINB)</h3><p>Refleja el estado de un botón en P0 al LED de P1.</p><pre>.device attiny85
+.equ DDRB = 0x17
+.equ PORTB = 0x18
+.equ PINB = 0x16
+.org 0
+rjmp inicio
+inicio:
+  ldi r16, 0b00000010
+  out DDRB, r16   ; P1 salida, P0 entrada
+  ldi r16, 1
+  out PORTB, r16  ; pull-up en P0
+bucle:
+  in r17, PINB
+  bst r17, 0      ; bit de P0 → T
+  bld r18, 1      ; T → bit de P1
+  andi r18, 0b00000010
+  out PORTB, r18
+  rjmp bucle</pre></div>
+              <div class="card"><h3>PWM por software</h3><p>Genera un fade de LED por software en P0 (sin PWM de hardware).</p><pre>.device attiny85
+.equ DDRB = 0x17
+.equ PORTB = 0x18
+.org 0
+rjmp inicio
+inicio:
+  ldi r16, 1
+  out DDRB, r16   ; P0 salida
+  ldi r24, 0      ; brillo 0..255
+bucle:
+  out PORTB, r24  ; encendido proporcional
+  ldi r20, 4
+  rcall pausa
+  eor r24, r24    ; simplificado: parpadeo lento
+  inc r24
+  rjmp bucle
+pausa:
+  ldi r21, 0
+pausa2:
+  dec r21
+  brne pausa2
+  dec r20
+  brne pausa
+  ret</pre></div>
+            </div>
+
+            <h3 style="margin-top:1.4rem">Avanzados</h3>
+            <div class="grid">
+              <div class="card"><h3>Dormir y despertar</h3><p>Usa el modo power-down y el watchdog para ahorrar batería.</p><pre>#include &lt;avr/sleep.h&gt;
+#include &lt;avr/wdt.h&gt;
+
+void setup() {
+  pinMode(1, OUTPUT);
+  set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+}
+void loop() {
+  digitalWrite(1, HIGH);
+  delay(10);
+  digitalWrite(1, LOW);
+  // duerme 8 s con el watchdog
+  wdt_enable(WDTO_8S);
+  sleep_mode();
+  wdt_disable();
+}</pre></div>
+              <div class="card"><h3>EEPROM interna</h3><p>Guarda un contador en EEPROM que sobrevive a los reinicios.</p><pre>#include &lt;EEPROM.h&gt;
+
+int direccion = 0;
+
+void setup() {
+  pinMode(1, OUTPUT);
+  int valor = EEPROM.read(direccion);
+  for (int i = 0; i &lt; valor &amp;&amp; i &lt; 15; i++) {
+    digitalWrite(1, HIGH); delay(80);
+    digitalWrite(1, LOW);  delay(80);
+  }
+}
+void loop() {
+  int valor = EEPROM.read(direccion);
+  if (valor &lt; 15) EEPROM.write(direccion, valor + 1);
+  delay(60000);
+}</pre></div>
+              <div class="card"><h3>I²C esclavo mínimo</h3><p>Responde a direcciones I²C con TinyWireS (librería externa).</p><pre>// Requiere la librería TinyWireS instalada.
+// En la Digispark: P0 = SDA, P2 = SCL.
+#include &lt;TinyWireS.h&gt;
+
+#define PROPIA_DIR 0x08
+
+void setup() {
+  TinyWireS.begin(PROPIA_DIR);
+}
+void loop() {
+  if (TinyWireS.available()) {
+    TinyWireS.send(TinyWireS.receive() + 1);  // eco +1
+  }
+}</pre></div>
+              <div class="card"><h3>Random con semilla analógica</h3><p>Genera aleatoriedad leyendo ruido en un pin flotante.</p><pre>void setup() {
+  pinMode(1, OUTPUT);
+  randomSeed(analogRead(A1));
+}
+void loop() {
+  int parpadeos = random(1, 6);
+  for (int i = 0; i &lt; parpadeos; i++) {
+    digitalWrite(1, HIGH); delay(60);
+    digitalWrite(1, LOW);  delay(60);
+  }
+  delay(random(500, 3000));
+}</pre></div>
+            </div>
+          </section>
+
+          <section id="publicar">
+            <div class="section-head"><span>09</span><h2>Publicar este sitio</h2></div>
+            <div class="callout"><strong>Esta sección es para quien administra el sitio, no para usarlo.</strong> Si solo quieres compilar y grabar tu ATtiny85, ya está todo explicado arriba.</div>
+            <p>El sitio es 100 % estático y se sirve desde la <strong>raíz del repositorio</strong>. En GitHub Pages se publica solo: el workflow <code>.github/workflows/pages.yml</code> empaqueta la raíz y la despliega con cada push a <code>main</code>. Para probarlo en tu equipo alcanza con el servidor del repositorio, que publica el sitio bajo el mismo subdirectorio que GitHub Pages (y con las mismas reglas: omite los archivos ocultos, sirve <code>index.html</code> en las carpetas y usa los tipos MIME del hosting):</p>
+            <pre>node tools/servir-local.mjs
+# abre http://127.0.0.1:8000/Arduino_attiny85_web_compiler/editor/
+
+# o, más simple, cualquier servidor estático desde la raíz:
+python3 -m http.server 8000
+# abre http://localhost:8000/</pre>
+            <p>Contenido de la raíz:</p>
+            <pre>├── index.html       ← portada
+├── manual.html      ← este manual
+├── assembler/       ← ensamblador AVR en el navegador
+├── editor/          ← editor C/C++
+├── compiler/        ← compilador ATtiny85 en WebAssembly
+├── flasher/         ← grabación WebUSB
+├── build/           ← firmware HEX de ejemplo
+├── DigisparkMouse/  ← sketch de ejemplo
+├── wasm/            ← inventario documentado del toolchain
+├── vendor/three/    ← three.js local (sin CDN)
+└── .nojekyll        ← evita que GitHub Pages omita los assets del compilador</pre>
+            <div class="callout warn"><strong>No sirve abrirlo con doble clic:</strong> el sitio usa módulos de JavaScript y WebAssembly, así que necesita servirse por HTTP (o HTTPS). Publicarlo en cualquier hosting estático es suficiente.</div>
+          </section>
+
+          <section id="apoyo">
+            <div class="section-head"><span>10</span><h2>Apoya el proyecto</h2></div>
+            <p>Todo el banco de trabajo es gratuito, sin anuncios ni telemetría: el compilador corre en tu navegador y nada sale de tu máquina. Si las herramientas te ahorraron una placa o un rato de debug, te invito a apoyar el proyecto.</p>
+            <div class="grid">
+              <div class="card">
+                <h3>♡ Invítame un café</h3>
+                <p>Las donaciones pagan el dominio, el hosting de los assets del compilador y el café que mantiene vivas las 3 a.m. de debug. Cualquier monto ayuda.</p>
+                <p><a class="btn btn--primary" href="https://paypal.me/rdvt?locale.x=es_XC&country.x=MX" target="_blank" rel="noreferrer noopener">Donar con PayPal</a></p>
+              </div>
+              <div class="card">
+                <h3>valedam.lat</h3>
+                <p>Más proyectos, notas y experimentos del autor: herramientas web, hardware y lo que siga construyendo.</p>
+                <p><a class="btn btn--secondary" href="https://valedam.lat/" target="_blank" rel="noreferrer noopener">Visitar valedam.lat →</a></p>
+              </div>
+            </div>
+          </section>
+
+        </article>
+      </div>
+    </main>
+    <footer>ATtiny85 Web Workbench · Manual de uso · <a href="./">Volver al inicio</a> · <a href="https://valedam.lat/" target="_blank" rel="noreferrer noopener">valedam.lat</a> · <a href="https://paypal.me/rdvt?locale.x=es_XC&country.x=MX" target="_blank" rel="noreferrer noopener">♡ Donar</a></footer>
+  </div>
+</body>
+</html>

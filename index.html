@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Herramientas web para ATtiny85 y Digispark: ensamblador, editor, flasher WebUSB y tutoriales. Todo funciona en el navegador, sin instalar nada.">
+  <meta name="theme-color" content="#171719">
+  <title>ATtiny85 Web Workbench</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232ba6ff'/%3E%3Ctext x='16' y='22' font-family='sans-serif' font-size='15' font-weight='bold' text-anchor='middle' fill='%230a1622'%3EA8%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./theme.css">
+  <style>
+    /* Reglas propias de esta página (design.md §8). No redefine tokens ni
+       componentes: sólo el layout del flujo y los desplegables del tutorial. */
+
+    /* Flujo recomendado en 4 pasos. */
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: var(--space-3);
+    }
+    .flow__step {
+      padding: var(--space-4);
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+    }
+    .flow__step b {
+      display: block;
+      font-family: var(--font-label);
+      font-size: .75rem;
+      letter-spacing: 2px;
+      color: var(--brand);
+      margin-bottom: var(--space-2);
+    }
+    .flow__step span { color: var(--text-2); font-size: .875rem; }
+
+    /* Tutoriales plegables. */
+    .tutorial { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-3); }
+    .tutorial details {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: var(--space-4) var(--space-5);
+    }
+    .tutorial details[open] { border-color: var(--line-strong); }
+    .tutorial summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--text);
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+    .tutorial summary::-webkit-details-marker { display: none; }
+    .tutorial summary::before {
+      content: "+";
+      font-family: var(--font-mono);
+      color: var(--brand);
+      font-size: 1.1rem;
+      line-height: 1;
+    }
+    .tutorial details[open] summary::before { content: "–"; }
+    .tutorial summary:focus-visible { outline-offset: 4px; }
+    .tutorial details > div { padding-top: var(--space-3); }
+    .tutorial p, .tutorial li { color: var(--text-2); }
+    .tutorial > details > div > :last-child { margin-bottom: 0; }
+
+    .stack-gap { display: grid; gap: var(--space-3); }
+    @media (min-width: 700px) { .stack-gap { grid-template-columns: 1fr 1fr; } }
+
+    /* Hero en dos columnas: texto + chip 3D (design.md §4 y §7). */
+    .hero__grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-6);
+      align-items: center;
+    }
+    @media (min-width: 960px) {
+      .hero__grid { grid-template-columns: minmax(0, 1.15fr) minmax(280px, .85fr); }
+    }
+
+    /* El contenedor reserva el alto con aspect-ratio: el 3D nunca mueve el layout. */
+    .hero__stage {
+      position: relative;
+      aspect-ratio: 4 / 3;
+      max-width: 460px;
+      width: 100%;
+      margin-inline: auto;
+      pointer-events: none; /* decorativo: no roba clics */
+    }
+    .hero__canvas,
+    .hero__fallback { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .hero__fallback { display: grid; place-items: center; opacity: .9; transition: opacity var(--t-slow) var(--ease); }
+    /* Cuando three.js monta la escena, la silueta deja paso al canvas. */
+    .hero__stage:has([data-hero-3d][data-estado="listo"]) .hero__fallback { opacity: 0; }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+  <header class="site-header site-header--collapsible" id="cabecera">
+    <div class="site-header__inner">
+      <a class="brand" href="./">
+        <span class="mark" aria-hidden="true">A8</span>
+        <span>
+          <strong>ATtiny85 Web Workbench</strong>
+          <small>Digispark · herramientas estáticas · sin dependencias</small>
+        </span>
+      </a>
+      <button class="nav-toggle" id="nav-toggle" type="button"
+              aria-expanded="false" aria-controls="nav-principal" aria-label="Abrir menú">
+        <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <path d="M3 6h14M3 10h14M3 14h14"/>
+        </svg>
+      </button>
+      <nav class="nav nav--drawer" id="nav-principal" aria-label="Principal">
+        <a href="./assembler/">Ensamblador</a>
+        <a href="./editor/">Editor C/C++</a>
+        <a href="./flasher/">Flasher</a>
+        <a href="./manual.html">Manual</a>
+        <a href="https://valedam.lat/" target="_blank" rel="noreferrer noopener">valedam.lat</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="contenido">
+    <section class="hero shell shell--wide">
+      <div class="hero__grid">
+      <div class="hero__body">
+        <p class="label label--brand">Flujo principal 100% web</p>
+        <h1 class="display">Escribe, valida y graba tu ATtiny85.</h1>
+        <p>El ensamblador funciona dentro del navegador y genera Intel HEX y binario; el editor C/C++ compila con WebAssembly (cc1plus + binutils AVR) sin instalar nada; y el flasher valida el firmware y lo graba por WebUSB.</p>
+        <div class="btn-row">
+          <a class="btn btn--primary btn--lg" href="./editor/">Abrir el editor C/C++</a>
+          <a class="btn btn--secondary btn--lg" href="./assembler/">Abrir ensamblador</a>
+          <a class="btn btn--ghost btn--lg" href="./flasher/">Grabar la placa</a>
+        </div>
+      </div>
+
+      <!-- Chip 3D decorativo (design.md §7). El contenedor reserva su alto con
+           `aspect-ratio`, así que no hay salto de layout. La silueta SVG es el
+           respaldo y sólo se oculta cuando three.js monta la escena. -->
+      <div class="hero__stage">
+        <div class="hero__canvas" data-hero-3d></div>
+        <svg class="hero__fallback" viewBox="0 0 320 240" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="chipPin" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#c8ccd4"/><stop offset="1" stop-color="#8a8f99"/>
+            </linearGradient>
+            <radialGradient id="chipGlow" cx="50%" cy="30%" r="70%">
+              <stop offset="0" stop-color="#2ba6ff" stop-opacity=".35"/>
+              <stop offset="1" stop-color="#2ba6ff" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <circle cx="160" cy="96" r="92" fill="url(#chipGlow)"/>
+          <g stroke="#2ba6ff" stroke-opacity=".55" fill="#1e1e21">
+            <rect x="96" y="64" width="128" height="72" rx="4" stroke-width="1.5"/>
+          </g>
+          <g fill="url(#chipPin)">
+            <rect x="104" y="136" width="7" height="18" rx="1.5"/><rect x="126" y="136" width="7" height="18" rx="1.5"/>
+            <rect x="148" y="136" width="7" height="18" rx="1.5"/><rect x="170" y="136" width="7" height="18" rx="1.5"/>
+            <rect x="190" y="136" width="7" height="18" rx="1.5"/><rect x="212" y="136" width="7" height="18" rx="1.5"/>
+          </g>
+          <g fill="url(#chipPin)">
+            <rect x="104" y="46" width="7" height="18" rx="1.5"/><rect x="126" y="46" width="7" height="18" rx="1.5"/>
+            <rect x="148" y="46" width="7" height="18" rx="1.5"/><rect x="170" y="46" width="7" height="18" rx="1.5"/>
+            <rect x="190" y="46" width="7" height="18" rx="1.5"/><rect x="212" y="46" width="7" height="18" rx="1.5"/>
+          </g>
+          <circle cx="108" cy="76" r="5" fill="#2ba6ff"/>
+          <text x="160" y="106" text-anchor="middle" fill="#a4a3ac"
+                font-family="ui-monospace, monospace" font-size="11" letter-spacing="2">ATTINY85</text>
+        </svg>
+      </div>
+      </div>
+    </section>
+
+    <section class="section shell">
+      <div class="section__head">
+        <h2>Elige tu flujo de trabajo</h2>
+        <p>Las tres herramientas comparten el mismo firmware: puedes ensamblar a mano, compilar C/C++ o cargar un HEX que ya tengas.</p>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <p class="label label--brand">01 · Principal</p>
+          <h3>Editor C/C++</h3>
+          <p>Edita un sketch estilo Arduino, configúralo y compílalo en el navegador con WebAssembly. El HEX es idéntico al de <code>arduino-cli</code> y la compilación corre en un hilo aparte, así que la interfaz sigue respondiendo.</p>
+          <a class="btn btn--primary" href="./editor/">Abrir el editor →</a>
+        </article>
+        <article class="card">
+          <p class="label label--brand">02 · Ensamblador</p>
+          <h3>Ensamblador AVR</h3>
+          <p>Escribe instrucciones AVR: resuelve etiquetas y expresiones, genera HEX y binario, limita la Digispark a 6012 bytes y muestra los diagnósticos línea por línea.</p>
+          <a class="btn btn--secondary" href="./assembler/">Ensamblar ahora →</a>
+        </article>
+        <article class="card">
+          <p class="label label--brand">03 · Hardware</p>
+          <h3>Flasher Digispark</h3>
+          <p>Selecciona un HEX o BIN, valida el checksum y el vector de reset, conecta el bootloader micronucleus y escribe la flash por WebUSB desde Chrome o Edge, con barra de progreso real.</p>
+          <a class="btn btn--secondary" href="./flasher/">Abrir el grabador →</a>
+        </article>
+      </div>
+    </section>
+
+    <section class="section shell">
+      <div class="section__head">
+        <h2>Flujo recomendado</h2>
+        <p>Si sólo quieres probar el grabador, el flasher ya trae un firmware de ejemplo publicado.</p>
+      </div>
+      <div class="flow">
+        <div class="flow__step"><b>01</b><span>Escribe el código o carga el ejemplo</span></div>
+        <div class="flow__step"><b>02</b><span>Compila o ensambla y revisa la flash usada</span></div>
+        <div class="flow__step"><b>03</b><span>Descarga el HEX y elígelo en el flasher</span></div>
+        <div class="flow__step"><b>04</b><span>Conecta la placa y graba</span></div>
+      </div>
+      <div class="callout callout--warn" style="margin-top: var(--space-4)">
+        <strong>Antes de grabar</strong>
+        WebUSB sólo funciona en Chrome o Edge de escritorio y con HTTPS o <code>localhost</code>. El bootloader micronucleus escucha unos segundos al conectar: pulsa Grabar primero y conecta la Digispark después. El botón queda bloqueado si el firmware supera 6012 bytes o no empieza con <code>jmp/rjmp</code>.
+      </div>
+    </section>
+
+    <section class="section shell">
+      <div class="section__head">
+        <h2>Tutorial rápido</h2>
+        <p>Los tutoriales completos están dentro de cada herramienta y en el manual.</p>
+      </div>
+      <div class="tutorial">
+        <details open>
+          <summary>Ensamblar un LED</summary>
+          <div>
+            <p>En el <a href="./assembler/">ensamblador</a>, carga el ejemplo o escribe:</p>
+            <pre><code>.device attiny85
+.equ DDRB = 0x17
+.equ PORTB = 0x18
+.org 0
+rjmp reset
+reset:
+  ldi r16, 1
+  out DDRB, r16
+loop:
+  out PORTB, r16
+  rjmp loop</code></pre>
+            <p>Elige <strong>Digispark</strong>, pulsa <strong>Ensamblar</strong> y descarga el HEX.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Grabar el HEX</summary>
+          <div>
+            <ol>
+              <li>Abre el <a href="./flasher/">Flasher WebUSB</a> en Chrome o Edge.</li>
+              <li>Elige el HEX descargado o el ejemplo publicado.</li>
+              <li>Pulsa Grabar y conecta la placa cuando Chrome muestre el selector.</li>
+              <li>Elige el dispositivo <code>16D0:0753</code>.</li>
+            </ol>
+          </div>
+        </details>
+        <details>
+          <summary>Compilar C/C++ en el navegador</summary>
+          <div>
+            <ol>
+              <li>Abre el <a href="./editor/">editor C/C++</a>: ya trae cargado el sketch de ejemplo.</li>
+              <li>Edita el código o abre uno tuyo con <strong>Abrir local</strong>.</li>
+              <li>Pulsa <strong>Compilar</strong> (o <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd>). La primera vez descarga el compilador, unos 20 MB; después queda en la caché del navegador.</li>
+              <li>El panel derecho muestra la flash usada y los errores. Al terminar, pulsa <strong>Grabar compilado</strong>.</li>
+            </ol>
+          </div>
+        </details>
+        <details>
+          <summary>Si algo no funciona</summary>
+          <div>
+            <ul>
+              <li><strong>No aparece la placa:</strong> pulsa Grabar primero y conecta la Digispark <em>después</em>, con el selector abierto. Tienes unos 5 segundos.</li>
+              <li><strong>No puedo grabar:</strong> el firmware supera 6012 bytes o no empieza con <code>jmp/rjmp</code>. El panel de validación te dice cuál es el caso.</li>
+              <li><strong>La compilación falla:</strong> revisa que no uses <code>Serial</code> (el ATtiny85 no tiene puerto serie) y que el sketch tenga <code>setup()</code> y <code>loop()</code>.</li>
+              <li><strong>Más dudas:</strong> el <a href="./manual.html#problemas">manual</a> tiene una lista ampliada de problemas frecuentes.</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="section shell" id="apoyo" aria-labelledby="apoyo-titulo">
+      <div class="section__head">
+        <h2 id="apoyo-titulo">Apoya el proyecto</h2>
+        <p>Todo aquí es gratuito, sin anuncios ni telemetría: el compilador corre en tu navegador y nada sale de tu máquina. Si las herramientas te ahorraron una placa o un rato de debug, invítame un café.</p>
+      </div>
+      <div class="cards">
+        <article class="card">
+          <p class="label label--brand">Donación</p>
+          <h3>Invítame un café</h3>
+          <p>Las donaciones pagan el dominio, el hosting de los assets del compilador y el café que mantiene vivas las 3 a.m. de debug. Cualquier monto ayuda.</p>
+          <a class="btn btn--primary" href="https://paypal.me/rdvt?locale.x=es_XC&country.x=MX" target="_blank" rel="noreferrer noopener">♡ Donar con PayPal</a>
+        </article>
+        <article class="card">
+          <p class="label label--brand">Autor</p>
+          <h3>valedam.lat</h3>
+          <p>Más proyectos, notas y experimentos en mi página principal: herramientas web, hardware y lo que siga construyendo.</p>
+          <a class="btn btn--secondary" href="https://valedam.lat/" target="_blank" rel="noreferrer noopener">Visitar valedam.lat →</a>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer shell">
+    <p>ATtiny85 Web Workbench · ensamblador, editor C/C++ con compilador en WebAssembly y flasher WebUSB. Todo estático y sin instalación.</p>
+    <nav aria-label="Pie de página">
+      <a href="./assembler/">Ensamblador</a>
+      <a href="./editor/">Editor C/C++</a>
+      <a href="./flasher/">Flasher WebUSB</a>
+      <a href="./manual.html">Manual</a>
+      <a href="https://valedam.lat/" target="_blank" rel="noreferrer noopener">valedam.lat</a>
+      <a href="https://paypal.me/rdvt?locale.x=es_XC&country.x=MX" target="_blank" rel="noreferrer noopener">♡ Donar</a>
+    </nav>
+  </footer>
+
+  <script>
+    /* Cabecera: se vuelve translúcida al pasar de 8 px de scroll (design.md §4). */
+    const cabecera = document.getElementById("cabecera");
+    const alScrollear = () => cabecera.classList.toggle("is-scrolled", window.scrollY > 8);
+    alScrollear();
+    window.addEventListener("scroll", alScrollear, { passive: true });
+
+    /* Menú móvil. */
+    const boton = document.getElementById("nav-toggle");
+    const nav = document.getElementById("nav-principal");
+    const esMovil = () => window.matchMedia("(max-width: 640px)").matches;
+    const cerrarNav = () => {
+      boton.setAttribute("aria-expanded", "false");
+      boton.setAttribute("aria-label", "Abrir menú");
+      if (esMovil()) nav.hidden = true;
+    };
+
+    if (esMovil()) nav.hidden = true;   // en escritorio el menú siempre está visible
+    boton.addEventListener("click", () => {
+      const abierto = boton.getAttribute("aria-expanded") === "true";
+      boton.setAttribute("aria-expanded", String(!abierto));
+      boton.setAttribute("aria-label", abierto ? "Abrir menú" : "Cerrar menú");
+      nav.hidden = abierto;
+    });
+    nav.addEventListener("click", (evento) => { if (evento.target.closest("a")) cerrarNav(); });
+    window.addEventListener("resize", () => {
+      if (!esMovil()) { nav.hidden = false; boton.setAttribute("aria-expanded", "false"); }
+      else if (boton.getAttribute("aria-expanded") !== "true") nav.hidden = true;
+    });
+  </script>
+  <script type="module" src="./hero-3d.js"></script>
+</body>
+</html>

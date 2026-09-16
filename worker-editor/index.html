@@ -1,0 +1,1156 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Worker Editor ATtiny85 · compilación con el agente local (@tools)</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f0a020'/%3E%3Ctext x='16' y='22' font-family='sans-serif' font-size='15' font-weight='bold' text-anchor='middle' fill='%230a1622'%3EW%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="../theme.css">
+    <style>
+      /* Mismos tokens que el resto del sitio (theme.css). Esta página es
+         experimental y vive aparte de editor/ para poder compararlas. */
+      :root {
+        color-scheme: dark;
+        --panel: var(--surface);
+        --panel-2: var(--surface-2);
+        --muted: var(--text-3);
+        --accent: var(--brand);
+        --accent-ink: var(--brand-ink);
+        --error: var(--danger);
+        --ok: var(--ok);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; padding: 1rem;
+        background: var(--bg); color: var(--text);
+        font: 15px/1.55 var(--font-sans);
+      }
+      h1 { font-family: var(--font-display); font-size: 1.15rem; margin: 0; }
+      h2 { font-size: 0.78rem; margin: 0 0 0.6rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+      h3 { font-size: 0.95rem; margin: 1rem 0 0.35rem; }
+      p { margin: 0 0 0.5rem; }
+      code, pre, .mono { font-family: var(--font-mono); }
+      a { color: var(--accent); }
+
+      header.bar {
+        display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+        position: sticky; top: 0; z-index: var(--z-sticky);
+        padding: 0.7rem 0 0.9rem; margin-bottom: 0.9rem;
+        background: rgba(23, 23, 25, .82);
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--line);
+      }
+      header.bar .grow { flex: 1 1 auto; }
+
+      button, select, input[type="text"], input[type="number"] {
+        font: inherit; color: var(--text); background: var(--panel-2);
+        border: 1px solid var(--line); border-radius: var(--r-md); padding: 0.45rem 0.7rem;
+      }
+      button { font-weight: 600; cursor: pointer; }
+      button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-3); }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+      button.primary:hover:not(:disabled) { background: var(--brand-hover); }
+      button.ghost { background: none; border-color: transparent; color: var(--muted); font-weight: 400; padding: 0.3rem 0.5rem; }
+      button.ghost:hover:not(:disabled) { color: var(--text); background: var(--panel-2); }
+
+      .chip {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        font-size: 0.78rem; padding: 0.3rem 0.6rem; border-radius: 999px;
+        border: 1px solid var(--line); color: var(--muted); white-space: nowrap;
+      }
+      .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: #6b6b74; box-shadow: 0 0 0 2px #0008; }
+      .chip.ok .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+      .chip.bad .dot { background: var(--error); }
+      .chip.warn .dot { background: var(--warn); }
+
+      /* Hero centrado, inspirado en 21st.dev pero a bajo volumen: un resplandor
+         casi imperceptible, tipografía contenida y una cinta de herramientas que
+         se desplaza sola. Nada se mueve rápido ni llama más de lo que debe. */
+      .hero {
+        --hero-pad: clamp(1rem, 3vw, 2rem);
+        position: relative; overflow: hidden; text-align: center;
+        padding: clamp(1.25rem, 2.8vw, 1.9rem) var(--hero-pad) 0;
+        margin-bottom: 1rem;
+        background: linear-gradient(180deg, #1b1b1f, var(--bg));
+        border: 1px solid var(--line); border-radius: var(--r-xl);
+      }
+      .hero::before {
+        content: ""; position: absolute; inset: 0; pointer-events: none;
+        background:
+          radial-gradient(58% 48% at 50% -8%, var(--brand-soft), transparent 72%),
+          radial-gradient(rgba(255, 255, 255, .026) 1px, transparent 1px);
+        background-size: auto, 22px 22px;
+      }
+      .hero > * { position: relative; }
+      .hero__body { margin-inline: auto; }
+
+      /* Todo va con el prefijo `.hero` a propósito: theme.css ya trae un
+         componente `.hero` y su regla `.hero p` (0,1,1) le gana por
+         especificidad a una clase suelta (0,1,0): sin esto, el antetítulo y la
+         bajada heredaban el 1.125rem de la portada. */
+      .hero .hero-etiqueta {
+        margin: 0 0 0.6rem; font-family: var(--font-label); font-size: 0.6rem;
+        letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
+        font-weight: 400;
+      }
+      .hero .hero-titulo {
+        margin: 0 auto 0.5rem; max-width: 24ch;
+        font-family: var(--font-display); font-size: clamp(1.25rem, 2.8vw, 1.7rem);
+        line-height: 1.14; letter-spacing: -0.02em; text-transform: none;
+        font-weight: 700; color: var(--text);
+      }
+      .hero .hero-titulo em { font-style: normal; color: var(--accent); }
+      .hero .hero-bajada {
+        margin: 0 auto; max-width: 62ch;
+        font-size: 0.92rem; line-height: 1.6; font-weight: 400; color: var(--muted);
+      }
+      .hero .hero-acciones {
+        display: flex; flex-wrap: wrap; gap: 0.6rem;
+        align-items: center; justify-content: center;
+        margin: 0.85rem 0 0; font-size: 0.9rem; font-weight: 400;
+      }
+      .hero .hero-enlace { color: var(--muted); font-size: 0.85rem; text-decoration: none; }
+      .hero .hero-enlace:hover { color: var(--text); }
+
+      .hero .hero-pastillas {
+        display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center;
+        list-style: none; margin: 0.85rem 0 0; padding: 0;
+      }
+      .hero .hero-pastillas li {
+        font-size: 0.72rem; padding: 0.22rem 0.6rem; border-radius: 999px;
+        border: 1px solid var(--line); color: var(--muted);
+        background: rgba(255, 255, 255, .015);
+      }
+
+      /* Cinta de herramientas: sangra hasta los bordes de la tarjeta y se
+         difumina en las puntas. Cada ítem lleva el espacio como padding (y no
+         como gap) para que el bucle de -50% cierre exacto y no dé el salto. */
+      .hero-marquesina {
+        margin: 0.95rem calc(var(--hero-pad) * -1) 0;
+        padding: 0.5rem 0; border-top: 1px solid var(--line);
+        -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+        mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
+      }
+      .hero-cinta {
+        display: flex; width: max-content;
+        /* El <ul> trae padding-inline-start del navegador: si no se resetea, el
+           -50% de la animación no coincide con una repetición y la cinta salta. */
+        margin: 0; padding: 0; list-style: none;
+        animation: cinta 48s linear infinite;
+      }
+      .hero-marquesina:hover .hero-cinta { animation-play-state: paused; }
+      .hero-cinta li {
+        padding-right: 1.7rem; white-space: nowrap;
+        font-family: var(--font-mono); font-size: 0.7rem;
+        color: var(--muted); opacity: 0.7;
+      }
+      @keyframes cinta { to { transform: translateX(-50%); } }
+      @media (prefers-reduced-motion: reduce) { .hero-cinta { animation: none; } }
+
+      /* En pantalla chica el hero se aprieta: sigue siendo un hero, pero no se
+         come la primera pantalla entera. */
+      @media (max-width: 700px) {
+        .hero { padding-top: 1.1rem; }
+        .hero .hero-titulo { font-size: 1.28rem; }
+        .hero .hero-bajada { font-size: 0.88rem; }
+        .hero .hero-acciones { margin-top: 0.7rem; gap: 0.45rem; }
+        .hero .hero-acciones .descarga.grande { font-size: 0.85rem; padding: 0.45rem 0.8rem; }
+        .hero .hero-pastillas { margin-top: 0.7rem; gap: 0.3rem; }
+        .hero-pastillas li { font-size: 0.68rem; padding: 0.18rem 0.5rem; }
+        .hero-marquesina { margin-top: 0.75rem; }
+      }
+
+      .layout { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0.9rem; align-items: start; }
+      @media (max-width: 1150px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+      .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 0.9rem; margin-bottom: 0.9rem; }
+      .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+      .grow { flex: 1 1 auto; }
+
+      .code { display: flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #0b0d12; height: 55vh; min-height: 280px; }
+      .gutter { overflow: hidden; padding: 0.7rem 0.55rem 0.7rem 0.7rem; background: #0a0c10; border-right: 1px solid var(--line); user-select: none; }
+      .gutter pre { margin: 0; font: 13px/1.55 var(--font-mono); color: #6b6b74; text-align: right; }
+      .code textarea { flex: 1 1 auto; margin: 0; padding: 0.7rem; background: transparent; color: var(--text); border: 0; outline: none; resize: none; font: 13px/1.55 var(--font-mono); white-space: pre; overflow: auto; }
+
+      .kv { display: grid; grid-template-columns: max-content 1fr; gap: 0.2rem 0.8rem; font-size: 0.86rem; margin: 0; }
+      .kv dt { color: var(--muted); }
+      .kv dd { margin: 0; overflow-wrap: anywhere; }
+
+      .progress { height: 9px; border-radius: var(--r-full); background: var(--surface-3); border: 1px solid var(--line); overflow: hidden; margin: 0.55rem 0 0.35rem; }
+      .progress > div { height: 100%; width: 0; background: linear-gradient(90deg, var(--brand-hover), var(--accent)); transition: width 0.2s; }
+      .progress.over > div { background: linear-gradient(90deg, #ff7a6b, #ff9f6b); }
+
+      .findings { list-style: none; margin: 0; padding: 0; font-size: 0.85rem; max-height: 16rem; overflow: auto; }
+      .findings li { display: flex; gap: 0.45rem; padding: 0.35rem 0; border-top: 1px solid var(--line); }
+      .findings li:first-child { border-top: 0; }
+      .findings .tag { flex: 0 0 auto; font-size: 0.7rem; text-transform: uppercase; padding-top: 0.15rem; }
+      .findings .error .tag, .findings li.error .tag { color: var(--error); }
+      .findings li.warn .tag { color: var(--warn); }
+      .findings li.info .tag { color: var(--info); }
+
+      .note { font-size: 0.84rem; color: var(--muted); }
+      .note.warn { color: var(--warn); }
+      .note.error { color: var(--error); }
+      .note.ok { color: var(--ok); }
+      kbd { font: 0.75rem var(--font-mono); padding: 0.12rem 0.3rem; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; color: var(--text); background: var(--panel-2); }
+
+      #salida {
+        margin: 0.5rem 0 0; padding: 0.7rem; max-height: 16rem; overflow: auto;
+        background: #101013; border: 1px solid var(--line); border-radius: var(--r-md);
+        font-size: 0.8rem; line-height: 1.5; color: var(--text-2); white-space: pre-wrap; word-break: break-word;
+      }
+      #hex {
+        margin: 0.5rem 0 0; padding: 0.7rem; max-height: 14rem; overflow: auto;
+        background: #101013; border: 1px solid var(--line); border-radius: var(--r-md);
+        font-size: 0.75rem; line-height: 1.45; color: var(--text-2); white-space: pre;
+      }
+
+      pre.bloque {
+        margin: 0.45rem 0; padding: 0.65rem 0.75rem; background: #0b0d12;
+        border: 1px solid var(--line); border-left: 3px solid var(--accent);
+        border-radius: 8px; font-size: 0.8rem; line-height: 1.55; overflow: auto; color: var(--text-2);
+      }
+      table { width: 100%; border-collapse: collapse; font-size: 0.84rem; margin: 0.4rem 0; }
+      th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+      th { color: var(--muted); font-weight: 600; }
+      details { margin-top: 0.6rem; }
+      summary { cursor: pointer; color: var(--text); font-weight: 650; font-size: 0.9rem; }
+      details > *:not(summary) { margin-top: 0.5rem; }
+      .guide ol, .guide ul { margin: 0.35rem 0; padding-left: 1.2rem; color: var(--muted); }
+      .guide li { margin-bottom: 0.3rem; }
+      .paso { display: inline-flex; align-items: center; justify-content: center; width: 1.4rem; height: 1.4rem; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 0.75rem; font-weight: 800; margin-right: 0.4rem; }
+      .descarga { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.35rem 0.7rem; border: 1px solid var(--accent); border-radius: var(--r-sm, 6px); background: var(--accent); color: var(--accent-ink); font-size: 0.8rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+      .descarga:hover { filter: brightness(1.1); }
+      .descarga.grande { font-size: 0.9rem; padding: 0.5rem 0.9rem; }
+    </style>
+  </head>
+  <body>
+    <header class="bar">
+      <div class="grow">
+        <h1>Worker Editor ATtiny85</h1>
+        <span class="note">Compila con el agente local <span class="mono">@tools</span> (arduino-cli) y graba por WebUSB</span>
+      </div>
+      <a href="../" class="note">Inicio</a>
+      <a href="../editor/" class="note">Editor WASM</a>
+      <a href="../flasher/" class="note">Flasher</a>
+      <a href="../manual.html" class="note">Manual</a>
+      <a href="tools.zip" download class="descarga" title="Descargar tools/ completo (agente local + scripts + README)">⬇ tools.zip</a>
+      <span class="chip" id="agent-chip"><span class="dot"></span><span id="agent-texto">Consultando el agente…</span></span>
+      <select id="placa" title="Placa (FQBN)"></select>
+      <button id="btn-compilar" class="primary">Compilar <span class="note mono">Ctrl+⏎</span></button>
+      <button id="btn-guardar">Guardar</button>
+    </header>
+
+    <section class="hero">
+      <div class="hero__body">
+        <p class="hero-etiqueta">Banco de trabajo ATtiny85</p>
+        <h2 class="hero-titulo">Del código al chip, <em>por el camino que quieras</em></h2>
+        <p class="hero-bajada">
+          El compilador <strong>WebAssembly</strong> corre dentro de la página; el <strong>agente local</strong> usa
+          <span class="mono">arduino-cli</span> y el core <span class="mono">digistump:avr</span> de tu máquina.
+          Compilá con el que prefieras, compará los dos HEX y grabá por <strong>WebUSB</strong> o por comando.
+        </p>
+
+        <p class="hero-acciones">
+          <a href="tools.zip" download class="descarga grande">⬇ Descargar tools.zip</a>
+          <a href="#guia" class="hero-enlace">Ver la guía de @tools ↓</a>
+        </p>
+
+        <ul class="hero-pastillas">
+          <li>Editar C/C++</li>
+          <li>Compilar</li>
+          <li>Validar</li>
+          <li>Grabar</li>
+          <li>Verificar</li>
+        </ul>
+      </div>
+
+      <div class="hero-marquesina" aria-hidden="true">
+        <ul class="hero-cinta" id="hero-cinta">
+          <li>ATtiny85 @ 16.5 MHz</li>
+          <li>8 KB flash · 512 B RAM</li>
+          <li>6012 B de usuario</li>
+          <li>cc1plus WASM</li>
+          <li>avr-as · avr-ld</li>
+          <li>avr-objcopy · Intel HEX</li>
+          <li>avr-gcc 7.3.0</li>
+          <li>digistump:avr 1.6.7</li>
+          <li>arduino-cli 1.5</li>
+          <li>micronucleus 1.6</li>
+          <li>WebUSB 16D0:0753</li>
+          <li>página 64 B · 94 páginas</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="integration" aria-labelledby="integracion-titulo">
+      <div class="integration__visual" data-toolchain-hub></div>
+      <div class="integration__body">
+        <p class="label label--brand">Integración</p>
+        <h2 id="integracion-titulo">Del editor al chip, sin piezas sueltas</h2>
+        <p>
+          El <strong>agente local</strong> corre <strong>cc1plus</strong>, <strong>avr-as</strong>,
+          <strong>avr-ld</strong> y <strong>avr-objcopy</strong> con <span class="mono">arduino-cli</span> y el core
+          <span class="mono">digistump:avr</span> instalados en tu máquina. El compilador
+          <strong>WebAssembly</strong> de <span class="mono">/editor/</span> produce el mismo Intel HEX sin instalar nada.
+          Después ese HEX entra por <strong>WebUSB</strong> o por <span class="mono">arduino-cli upload</span>.
+        </p>
+        <p class="integration__pie">ATtiny85 @ 16.5 MHz · 6012 B de usuario · página de 64 B · 94 páginas</p>
+        <p class="integration__acciones">
+          <a class="btn btn--secondary btn--sm" href="#guia">Ver la guía de @tools</a>
+        </p>
+      </div>
+    </section>
+
+    <div class="layout">
+      <div>
+        <div class="card">
+          <div class="row" style="margin-bottom: 0.6rem">
+            <label class="note" for="sketch-name">Nombre del sketch:</label>
+            <input id="sketch-name" type="text" value="DigisparkMouse" size="20" spellcheck="false" />
+            <span class="note">letras, dígitos y <span class="mono">_</span> (así lo valida el agente)</span>
+
+            <span class="grow"></span>
+
+            <label class="note" id="repo-picker" hidden style="cursor: pointer">
+              abrir del repo:
+              <select id="archivos-repo"><option value="">(elige uno)</option></select>
+            </label>
+          </div>
+
+          <div class="code">
+            <div class="gutter" id="gutter"><pre id="gutter-pre">1</pre></div>
+            <textarea id="src" wrap="off" spellcheck="false" autocapitalize="off" autocorrect="off" aria-label="Código fuente"></textarea>
+          </div>
+
+          <div class="row" style="margin-top: 0.6rem">
+            <label class="note" style="cursor: pointer">
+              ruta para guardar:
+              <input id="save-path" type="text" value="DigisparkMouse/DigisparkMouse.ino" size="34" spellcheck="false" />
+            </label>
+            <span class="grow"></span>
+            <button id="btn-descargar-hex" class="ghost" disabled>descargar .hex</button>
+            <button id="btn-descargar-bin" class="ghost" disabled>descargar .bin</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Salida del agente</h2>
+          <pre id="salida" aria-live="polite"></pre>
+        </div>
+
+        <div class="card guide" id="guia">
+          <h2>Guía de @tools: instalar, levantar y usar</h2>
+          <p class="note">
+            Todo lo de acá corre en <strong>tu máquina</strong>. La página es estática y se sirve por HTTP local;
+            lo único que hace de backend es el agente, que escucha <strong>sólo en 127.0.0.1</strong>.
+          </p>
+
+          <details open>
+            <summary>1 · Qué es @tools y qué hace cada archivo</summary>
+            <table>
+              <tr><th>Archivo</th><th>Para qué sirve</th><th>Lo usa esta página</th></tr>
+              <tr><td><span class="mono">tools/compile-agent.py</span></td><td>Agente HTTP local: compila con arduino-cli, devuelve el Intel HEX y graba en la placa. Escucha en 127.0.0.1:8765.</td><td><strong>Sí</strong></td></tr>
+              <tr><td><span class="mono">tools/README.md</span></td><td>Requisitos, instalación, uso del agente, los comandos de grabación y qué hace cada script.</td><td>Documentación</td></tr>
+              <tr><td><span class="mono">tools/agent-selftest.mjs</span></td><td>Test del agente contra el sketch del repo: compara el HEX con el de <span class="mono">build/</span>.</td><td>Verificación</td></tr>
+              <tr><td><span class="mono">tools/check-wasm-toolchain.sh</span></td><td>Comprueba el entorno nativo: emcc, arduino-cli, avr-gcc/as/ld/objcopy y el core digistump.</td><td>Diagnóstico</td></tr>
+              <tr><td><span class="mono">tools/build-attiny85-wasm.sh</span></td><td>Valida la cadena C→ELF→HEX para attiny85/avr25 y que Emscripten genere WebAssembly.</td><td>Opcional</td></tr>
+              <tr><td><span class="mono">tools/prepare-attiny85-wasm.py</span></td><td>Genera el inventario de assets (<span class="mono">manifest.json</span>) para el toolchain WASM.</td><td>Opcional</td></tr>
+              <tr><td><span class="mono">tools/assembler-selftest.mjs</span> y <span class="mono">tools/assembler-avr-compare.mjs</span></td><td>Testean el ensamblador y comparan su salida contra avr-as/avr-ld reales.</td><td>No</td></tr>
+              <tr><td><span class="mono">tools/compiler-selftest.mjs</span>, <span class="mono">tools/browser-check.mjs</span>, <span class="mono">tools/preparar-compiler-assets.mjs</span></td><td>Tests del compilador WASM (la ruta de <span class="mono">editor/</span>).</td><td>No</td></tr>
+            </table>
+            <p class="note warn">
+              Los scripts del compilador y del navegador deben ejecutarse desde la raíz de este checkout,
+              porque la raíz del repo también es la raíz del sitio. Si una copia antigua menciona un prefijo
+              <span class="mono">web/</span>, esa documentación está desactualizada: no cambies las rutas del sitio
+              publicado. El agente y los tests del agente/ensamblador usan las rutas actuales.
+            </p>
+          </details>
+
+          <details>
+            <summary>2 · Qué hay que instalar en la máquina</summary>
+            <table>
+              <tr><th>Requisito</th><th>Por qué</th><th>Cómo verificar</th></tr>
+              <tr><td><strong>Python 3.9+</strong></td><td>Es el runtime del agente. No necesita pip ni paquetes: sólo la librería estándar.</td><td><span class="mono">python3 --version</span></td></tr>
+              <tr><td><strong>arduino-cli</strong></td><td>Es el compilador real. El agente lo llama por subproceso.</td><td><span class="mono">arduino-cli version</span></td></tr>
+              <tr><td><strong>core <span class="mono">digistump:avr</span></strong></td><td>Trae la placa <span class="mono">digistump:avr:digispark-tiny</span> y las librerías DigiMouse/V-USB.</td><td><span class="mono">arduino-cli core list</span></td></tr>
+              <tr><td><strong>core <span class="mono">arduino:avr</span></strong></td><td>Aporta el <span class="mono">avr-gcc 7.3.0</span>. En Apple Silicon el agente lo usa automáticamente porque el binario i386 de Digistump no corre.</td><td><span class="mono">arduino-cli core list</span></td></tr>
+              <tr><td><strong>Node.js</strong> (opcional)</td><td>Sólo para correr los tests <span class="mono">.mjs</span>. El editor no lo necesita.</td><td><span class="mono">node --version</span></td></tr>
+              <tr><td><strong>Chrome / Edge de escritorio</strong></td><td>Para grabar por WebUSB. Compilar funciona en cualquier navegador.</td><td>—</td></tr>
+            </table>
+          </details>
+
+          <details>
+            <summary>3 · Instalación paso a paso</summary>
+
+            <p class="note" style="margin-top: 0">
+              <strong>Atajo:</strong> bajá
+              <a href="tools.zip" download class="descarga">⬇ tools.zip</a>
+              y descomprimilo en la raíz del repo. Adentro está todo
+              <span class="mono">tools/</span> —el agente, los scripts de verificación y el
+              <span class="mono">README.md</span> con los requisitos y el uso— así que no hace falta copiar
+              archivo por archivo. Después seguí con el paso 4 para levantarlo.
+              <br />
+              Lo <em>único</em> imprescindible para que esta página funcione es
+              <span class="mono">tools/compile-agent.py</span>.
+            </p>
+
+            <h3>macOS (Homebrew)</h3>
+            <pre class="bloque"># 1. Python 3: macOS ya trae python3
+python3 --version
+
+# 2. arduino-cli
+brew install arduino-cli
+
+# 3. Los dos cores que hacen falta
+arduino-cli core update-index
+arduino-cli core install arduino:avr
+arduino-cli core install digistump:avr</pre>
+
+            <h3>Linux</h3>
+            <pre class="bloque"># 1. Python 3 (viene con la mayoría de las distros)
+python3 --version
+
+# 2. arduino-cli con el instalador oficial
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+sudo install -m 755 bin/arduino-cli /usr/local/bin/arduino-cli
+arduino-cli version
+
+# 3. Los dos cores
+arduino-cli core update-index
+arduino-cli core install arduino:avr
+arduino-cli core install digistump:avr</pre>
+
+            <h3>Si <span class="mono">digistump:avr</span> no aparece</h3>
+            <p class="note">
+              Significa que falta el board index de Digistump en la lista de URLs adicionales. El oficial es
+              <span class="mono">http://digistump.com/package_digistump_index.json</span> y el sitio suele estar caído;
+              el mirror verificado en GitHub sirve la misma versión 1.6.7:
+            </p>
+            <pre class="bloque">arduino-cli config add board_manager.additional_urls \
+  https://raw.githubusercontent.com/digistump/arduino-boards-index/master/package_digistump_index.json
+arduino-cli core update-index
+arduino-cli core install digistump:avr
+arduino-cli core list   # tiene que mostrar digistump:avr</pre>
+
+            <h3>Comprobar el entorno nativo (opcional, para WASM)</h3>
+            <pre class="bloque">bash tools/check-wasm-toolchain.sh</pre>
+            <p class="note">
+              Sólo hace falta si vas a reconstruir el toolchain WebAssembly. Para <strong>esta</strong> página
+              (agente local) no es necesario: el agente compila con el avr-gcc del core instalado.
+            </p>
+          </details>
+
+          <details>
+            <summary>4 · Levantar el agente</summary>
+            <p>Desde la raíz del repo, en una terminal que dejás abierta mientras usás el editor:</p>
+            <pre class="bloque">python3 tools/compile-agent.py</pre>
+            <p class="note">Salida esperada:</p>
+            <pre class="bloque">Agente de compilación ATtiny85
+  escuchando en http://127.0.0.1:8765
+  repo:        /ruta/al/repo
+  arduino-cli: arduino-cli
+  orígenes:    http://localhost:*, http://127.0.0.1:*, https://rdvt.github.io, ...
+  versión:     arduino-cli  Version: 1.x.x ...
+
+Listo. En el editor, apretá Compilar.</pre>
+            <h3>Opciones (todas opcionales)</h3>
+            <table>
+              <tr><th>Flag</th><th>Default</th><th>Para qué</th></tr>
+              <tr><td><span class="mono">--port</span></td><td><span class="mono">8765</span></td><td>La URL publicada usa automáticamente <span class="mono">http://localhost:8765</span>. Sólo si cambiás el puerto podés usar <span class="mono">?agent=http://localhost:9000</span>.</td></tr>
+              <tr><td><span class="mono">--host</span></td><td><span class="mono">127.0.0.1</span></td><td>Interfaz. No lo cambies a 0.0.0.0: expondrías tu disco al preprocesador de C++.</td></tr>
+              <tr><td><span class="mono">--repo</span></td><td>raíz del repo</td><td>Otra copia del proyecto.</td></tr>
+              <tr><td><span class="mono">--arduino-cli</span></td><td><span class="mono">arduino-cli</span></td><td>Ruta completa si no está en el PATH.</td></tr>
+              <tr><td><span class="mono">--timeout</span></td><td><span class="mono">180</span></td><td>Segundos antes de cancelar una compilación.</td></tr>
+              <tr><td><span class="mono">--allow-origin</span></td><td>localhost, 127.0.0.1, rdvt.github.io, valedam.lat</td><td>Origen extra permitido; se puede repetir. Necesario si servís el sitio en otro dominio.</td></tr>
+            </table>
+          </details>
+
+          <details>
+            <summary>5 · Servir el sitio y abrir esta página</summary>
+            <p>
+              El agente es un servicio aparte: la página se sirve como cualquier archivo estático. Dos terminales:
+            </p>
+            <pre class="bloque"># terminal 1 (raíz del repo)
+python3 -m http.server 8000
+
+# terminal 2 (raíz del repo)
+python3 tools/compile-agent.py</pre>
+            <p>Y abrí en Chrome o Edge:</p>
+            <pre class="bloque">http://localhost:8000/worker-editor/</pre>
+            <p class="note">
+              Funciona igual desde GitHub Pages (<span class="mono">https://rdvt.github.io/Arduino_attiny85_web_compiler/worker-editor/</span>):
+              Chrome permite que una página HTTPS llame a <span class="mono">http://127.0.0.1</span> porque lo trata como origen confiable.
+              Si usás otro dominio, arrancá el agente con <span class="mono">--allow-origin</span>.
+            </p>
+          </details>
+
+          <details>
+            <summary>6 · Cómo se usa el editor, paso a paso</summary>
+            <ol>
+              <li><span class="paso">1</span>Confirmá el chip de arriba a la derecha: <strong>Agente OK</strong>. Si dice “sin respuesta”, el paso 4 no está hecho.</li>
+              <li><span class="paso">2</span>Elegí la placa. Para Digispark: <span class="mono">digistump:avr:digispark-tiny</span> (Default 16.5 MHz).</li>
+              <li><span class="paso">3</span>Editá el código. El nombre del sketch define el <span class="mono">.ino</span> y el <span class="mono">.hex</span> resultante.</li>
+              <li><span class="paso">4</span>Pulsá <strong>Compilar</strong> (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>⏎</kbd>). El panel derecho muestra flash/RAM, errores y el HEX.</li>
+              <li><span class="paso">5</span>Bajá el <span class="mono">.hex</span> (o el <span class="mono">.bin</span>) para grabarlo con otra herramienta.</li>
+              <li><span class="paso">6</span>Para grabar elegí uno de los dos caminos:
+                <strong>Grabar desde la máquina</strong> (recomendado: usa <span class="mono">arduino-cli</span>, sin WebUSB — ver paso 7)
+                o <strong>Grabar</strong>, que abre el selector WebUSB de Chrome para elegir <span class="mono">16D0:0753</span>.</li>
+            </ol>
+            <p class="note">
+              <strong>Guardar</strong> escribe el archivo dentro del repo a través del agente (deja un <span class="mono">.bak</span> antes).
+              <strong>abrir del repo</strong> lista los fuentes que el agente puede leer.
+            </p>
+          </details>
+
+          <details open>
+            <summary>7 · Grabar desde la máquina, sin WebUSB (lo más confiable)</summary>
+            <p>
+              El agente corre en tu máquina, así que puede grabar con el <strong>mismo camino que el IDE de Arduino</strong>:
+              <span class="mono">arduino-cli</span> llama al CLI de micronucleus (recetas
+              <span class="mono">tools.micronucleus.*</span> del core Digistump), que se queda esperando hasta 60 s a que
+              la placa aparezca en modo bootloader. No pasa por Chrome, ni por WebUSB, ni necesita permisos de USB.
+            </p>
+            <p class="note">
+              <strong>El orden importa:</strong> pulsá <strong>Grabar desde la máquina</strong> y <em>recién entonces</em>
+              reenchufá la placa. El bootloader micronucleus sólo escucha ~5 s después de conectarse; si la enchufás antes
+              de pulsar, el agente nunca la ve.
+            </p>
+            <p class="note">Por comando, sin la página (equivale a pulsar el botón):</p>
+            <pre class="bloque"># 1. Compilar a un directorio de salida
+arduino-cli compile --fqbn digistump:avr:digispark-tiny --output-dir build DigisparkMouse
+
+# 2. Grabar (queda esperando la placa: reenchufala cuando lo veas)
+arduino-cli upload -p usb --fqbn digistump:avr:digispark-tiny --input-dir build DigisparkMouse</pre>
+            <p class="note">
+              La salida esperada de una grabación buena termina con
+              <span class="mono">&gt;&gt; Micronucleus done. Thank you!</span> y muestra antes
+              <span class="mono">&gt; Device has firmware version 1.6</span> y
+              <span class="mono">&gt; Available space for user applications: 6012 bytes</span>.
+            </p>
+            <p class="note">
+              Por HTTP, si querés scriptearlo:
+            </p>
+            <pre class="bloque">curl -s -X POST http://127.0.0.1:8765/upload \
+  -H 'content-type: application/json' \
+  -d "$(python3 -c 'import json;print(json.dumps({"source": open("DigisparkMouse/DigisparkMouse.ino").read(), "name": "DigisparkMouse", "fqbn": "digistump:avr:digispark-tiny"}))')" \
+  | python3 -m json.tool</pre>
+            <p class="note">
+              Ojo con un detalle de <span class="mono">arduino-cli</span>: devuelve <strong>exit 0 aunque micronucleus falle</strong>
+              (el timeout de búsqueda de placa no se propaga). Por eso el agente decide el resultado leyendo el log y
+              buscando <span class="mono">Micronucleus done</span>, no el código de salida.
+            </p>
+            <p class="note">
+              Si la placa <em>no</em> aparece, el agente lo dice claro y no toca nada: la flash de usuario queda intacta.
+            </p>
+          </details>
+
+          <details>
+            <summary>8 · Endpoints del agente (para scriptear o depurar)</summary>
+            <table>
+              <tr><th>Método y ruta</th><th>Qué devuelve</th></tr>
+              <tr><td><span class="mono">GET /health</span></td><td>arduino-cli, dataDir, cores, <span class="mono">digistumpInstalled</span> y la lista de placas ATtiny85 detectadas.</td></tr>
+              <tr><td><span class="mono">GET /boards</span></td><td>Placas ATtiny85 con <span class="mono">fqbn</span>, <span class="mono">fCpu</span>, <span class="mono">maximumSize</span> y <span class="mono">usesUsb</span>.</td></tr>
+              <tr><td><span class="mono">GET /files</span></td><td>Fuentes del repo que se pueden abrir/editar.</td></tr>
+              <tr><td><span class="mono">GET /sketch?path=&lt;rel&gt;</span></td><td>Contenido de un archivo del repo.</td></tr>
+              <tr><td><span class="mono">POST /compile</span></td><td>Body <span class="mono">{ source, name, fqbn, files[] }</span> → <span class="mono">{ ok, hex, bytes, sizes, files, log, error }</span>.</td></tr>
+              <tr><td><span class="mono">POST /upload</span></td><td>Body <span class="mono">{ source, name, fqbn, files[], port? }</span> → compila y <strong>graba</strong> con arduino-cli. Espera hasta 60 s a la placa. Devuelve <span class="mono">{ ok, stage, bytes, log, error }</span>.</td></tr>
+              <tr><td><span class="mono">POST /save</span></td><td>Body <span class="mono">{ path, source }</span> → guarda con backup <span class="mono">.bak</span>.</td></tr>
+            </table>
+            <p class="note">Prueba rápida sin navegador:</p>
+            <pre class="bloque">curl -s http://127.0.0.1:8765/health | python3 -m json.tool</pre>
+          </details>
+
+          <details>
+            <summary>9 · Verificar que todo funciona</summary>
+            <pre class="bloque"># Con el agente levantado en otra terminal:
+node tools/agent-selftest.mjs</pre>
+            <p class="note">
+              Compara el HEX del sketch del repo contra <span class="mono">build/DigisparkMouse.ino.hex</span>,
+              comprueba que un cambio cambie el binario, que un error de compilación se reporte como error y
+              que la lista blanca de orígenes rechace lo que no corresponde.
+            </p>
+            <pre class="bloque"># Tests que no necesitan agente:
+node flasher/verify.mjs
+node tools/assembler-selftest.mjs</pre>
+          </details>
+
+          <details>
+            <summary>10 · Problemas frecuentes</summary>
+            <table>
+              <tr><th>Síntoma</th><th>Causa y solución</th></tr>
+              <tr><td>“No pude hablar con el agente en http://localhost:8765”</td><td>El agente no está levantado o está en otro puerto. Levantalo (paso 4) y abrí nuevamente la URL normal del Worker Editor; no hace falta agregar parámetros.</td></tr>
+              <tr><td>HTTP 403 “origen rechazado”</td><td>Servís el sitio en un dominio que no está en la lista blanca. Arrancá el agente con <span class="mono">--allow-origin http://tu-host:8000</span>.</td></tr>
+              <tr><td>“No encuentro 'arduino-cli'” en la consola del agente</td><td>No está en el PATH del proceso: instalalo o pasá <span class="mono">--arduino-cli /ruta/completa</span>.</td></tr>
+              <tr><td>Compila pero falla con <span class="mono">Arduino.h</span> o <span class="mono">DigiMouse.h</span></td><td>Falta el core. <span class="mono">arduino-cli core list</span> tiene que mostrar <span class="mono">digistump:avr</span> (ver paso 3).</td></tr>
+              <tr><td>Error de <span class="mono">avr-gcc</span> en Apple Silicon</td><td>El agente ya reemplaza el compilador i386 de Digistump por el de <span class="mono">arduino:avr</span>. Si igual falla, instalá <span class="mono">arduino:avr 1.8.8</span>.</td></tr>
+              <tr><td>El puerto 8765 está ocupado</td><td><span class="mono">python3 tools/compile-agent.py --port 9000</span> y, sólo en ese caso, abrí la página con <span class="mono">?agent=http://localhost:9000</span>.</td></tr>
+              <tr><td>Grabar dice “no se encontró el dispositivo”</td><td>El bootloader micronucleus escucha ~5 s: pulsá Grabar, desconectá la placa y volvé a enchufarla con el diálogo abierto. Puerto USB directo, sin hub.</td></tr>
+              <tr><td>Grabar por WebUSB se queda en “Esperando a que la placa se reenumere”</td><td>El borrado deja a Chrome sin handle válido en algunos hosts. Usá <strong>Grabar desde la máquina</strong> (paso 7): por arduino-cli no pasa. Si no, pulsá Grabar otra vez y reenchufá la placa: ese intento ya no vuelve a borrar y escribe directo.</td></tr>
+              <tr><td>“MICRONUCLEUS device seems to be inactive”</td><td>El bootloader quedó a medio responder: desenchufá, pulsá Grabar y volvé a enchufarla.</td></tr>
+            </table>
+          </details>
+        </div>
+      </div>
+
+      <aside>
+        <div class="card">
+          <h2>Agente local</h2>
+          <dl class="kv" id="agent-kv"></dl>
+          <p class="note" style="margin-top: 0.6rem">
+            Arranque: <span class="mono" id="agent-command">python3 tools/compile-agent.py</span><br />
+            URL: <span class="mono" id="agent-url">http://127.0.0.1:8765</span>
+          </p>
+          <button id="btn-reintentar" class="ghost">reintentar conexión</button>
+          <p class="note" style="margin-top: 0.6rem">
+            ¿El agente no está en esta máquina? Bajá
+            <a href="tools.zip" download class="descarga">⬇ tools.zip</a>
+            y corré <span class="mono">python3 tools/compile-agent.py</span>.
+          </p>
+        </div>
+
+        <div class="card">
+          <h2>Compilación</h2>
+          <div id="build-resumen" class="note">Sin compilar todavía.</div>
+          <div class="progress" id="flash-bar"><div id="flash-fill"></div></div>
+          <dl class="kv" id="build-kv"></dl>
+          <ul class="findings" id="build-findings"></ul>
+          <details>
+            <summary>Ver Intel HEX</summary>
+            <pre id="hex">Compilá para ver el HEX.</pre>
+          </details>
+        </div>
+
+        <div class="card">
+          <h2>Grabar en la placa</h2>
+          <div class="row">
+            <button id="btn-conectar">Conectar</button>
+            <button id="btn-grabar" class="primary">Grabar</button>
+          </div>
+          <div class="row" style="margin-top: 0.55rem">
+            <label class="note" for="protocolo">Protocolo:</label>
+            <select id="protocolo">
+              <option value="auto">Automático (según el bootloader)</option>
+              <option value="v2">Forzar v2 (palabras de 4 bytes)</option>
+              <option value="v1">Forzar v1 (página completa)</option>
+            </select>
+          </div>
+          <dl class="kv" id="device-kv"></dl>
+
+          <hr style="border: none; border-top: 1px solid var(--line); margin: 0.75rem 0" />
+          <p class="note" style="margin-top: 0">
+            <strong>Sin WebUSB:</strong> el agente local corre en tu máquina, así que puede grabar con
+            <span class="mono">arduino-cli</span> (que a su vez usa el CLI de micronucleus), el mismo camino que el IDE de Arduino.
+            No hace falta Chrome ni permisos de USB.
+          </p>
+          <div class="row" style="margin-top: 0.55rem">
+            <button id="btn-grabar-local" class="primary">Grabar desde la máquina</button>
+          </div>
+          <p class="note" id="grabar-local-estado" style="margin-top: 0.4rem">
+            Pulsá y <strong>reenchufá la placa</strong> cuando el agente ya esté esperando: el bootloader sólo escucha ~5 s.
+          </p>
+        </div>
+
+        <div class="card">
+          <h2>Diagnóstico del firmware</h2>
+          <ul class="findings" id="lint-findings">
+            <li class="info"><span class="tag">…</span><span>Sin compilar todavía.</span></li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+    <footer style="display: flex; flex-wrap: wrap; gap: 0.9rem; align-items: center; padding: 0.9rem 0.2rem 0; color: var(--muted); font-size: 0.8rem">
+      <span style="flex: 1">ATtiny85 Web Workbench · Worker Editor (agente local)</span>
+      <a href="../" class="note">Inicio</a>
+      <a href="../manual.html" class="note">Manual</a>
+      <a href="https://valedam.lat/" target="_blank" rel="noreferrer noopener" class="note">valedam.lat</a>
+    </footer>
+
+    <script type="module" src="../toolchain-hub.js"></script>
+    <script type="module">
+      import { CompileAgent, agentUrlFromLocation, AgentError, AGENT_COMMAND } from "../editor/agent.js";
+      import { checkFlashImage, usagePercent, summarizeBuild, ATTINY85_RAM, FALLBACK_BOARDS } from "../editor/attiny85.js";
+      import { MicronucleusFlasher, FASE_ETIQUETAS } from "../flasher/micronucleus.js";
+      import { parseIntelHex } from "../flasher/intelhex.js";
+
+      const $ = (id) => document.getElementById(id);
+      const agent = new CompileAgent(agentUrlFromLocation());
+      const flasher = new MicronucleusFlasher({ onLog: (line) => log(line) });
+
+      const NAME_RE = /^[A-Za-z][A-Za-z0-9_]{0,62}$/;
+      const EXAMPLE = [
+        "#include <DigiMouse.h>",
+        "",
+        "// El agente local compila este sketch con el core digistump:avr.",
+        "void setup() {",
+        "  DigiMouse.begin();",
+        "}",
+        "",
+        "void loop() {",
+        "  DigiMouse.moveX(10);",
+        "  DigiMouse.delay(500);",
+        "}",
+        "",
+      ].join("\n");
+
+      const state = {
+        boards: [...FALLBACK_BOARDS],
+        board: null,
+        compiled: null, // { hex, image }
+        online: false,
+        busy: false,
+      };
+
+      /* ------------------------------- utilidades ----------------------------- */
+
+      function log(line) {
+        const time = new Date().toLocaleTimeString("es-AR", { hour12: false });
+        const out = $("salida");
+        out.textContent += `[${time}] ${line}\n`;
+        const lines = out.textContent.split("\n");
+        if (lines.length > 400) out.textContent = lines.slice(-400).join("\n");
+        out.scrollTop = out.scrollHeight;
+      }
+
+      function download(name, data, type) {
+        const blob = new Blob([data], { type });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = name;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+
+      function renderKv(target, entries) {
+        target.innerHTML = "";
+        for (const [key, value] of entries) {
+          if (value === null || value === undefined || value === "") continue;
+          const dt = document.createElement("dt");
+          dt.textContent = key;
+          const dd = document.createElement("dd");
+          dd.textContent = String(value);
+          target.append(dt, dd);
+        }
+        target.hidden = target.children.length === 0;
+      }
+
+      function setAgentChip(kind, text) {
+        $("agent-chip").className = `chip ${kind}`;
+        $("agent-texto").textContent = text;
+      }
+
+      /* -------------------------------- editor -------------------------------- */
+
+      function refreshGutter() {
+        const lines = $("src").value.split("\n").length;
+        $("gutter-pre").textContent = Array.from({ length: lines }, (_, i) => i + 1).join("\n");
+      }
+
+      function fillBoards(boards) {
+        const select = $("placa");
+        select.innerHTML = "";
+        for (const item of boards) {
+          const option = document.createElement("option");
+          option.value = item.fqbn;
+          option.textContent = `${item.name ?? item.fqbn} · ${String(item.fCpu ?? "").replace(/L$/, "")} Hz · ${item.maximumSize ?? "?"} B`;
+          select.append(option);
+        }
+        state.board = boards.find((item) => item.usesUsb) ?? boards[0] ?? null;
+        if (state.board) select.value = state.board.fqbn;
+      }
+
+      function board() {
+        return state.board ?? state.boards[0] ?? FALLBACK_BOARDS[0];
+      }
+
+      /* --------------------------------- agente ------------------------------- */
+
+      async function pingAgent() {
+        try {
+          const health = await agent.health();
+          state.online = true;
+          if (Array.isArray(health.boards) && health.boards.length > 0) {
+            state.boards = health.boards;
+            fillBoards(state.boards);
+          }
+          renderKv($("agent-kv"), [
+            ["Estado", "conectado"],
+            ["arduino-cli", health.arduinoCli],
+            ["data dir", health.dataDir],
+            ["Cores", (health.cores ?? []).join(", ")],
+            ["core digistump", health.digistumpInstalled ? "instalado" : "FALTA (ver guía, paso 3)"],
+            ["Placas ATtiny85", (health.boards ?? []).length],
+          ]);
+          setAgentChip(health.digistumpInstalled ? "ok" : "warn", health.digistumpInstalled ? "Agente OK" : "Falta el core digistump:avr");
+          log(`Agente conectado en ${agent.baseUrl} · cores: ${(health.cores ?? []).join(", ") || "ninguno"}`);
+          if (!health.digistumpInstalled) log("ATENCIÓN: el core digistump:avr no está instalado; la compilación va a fallar. Mirá la guía, paso 3.");
+          await loadRepoFiles();
+          await loadDefaultSketch();
+        } catch (error) {
+          state.online = false;
+          renderKv($("agent-kv"), [["Estado", "sin respuesta"], ["URL", agent.baseUrl]]);
+          setAgentChip("bad", "Agente sin respuesta");
+          log(`No pude hablar con el agente en ${agent.baseUrl}.`);
+          log("La URL normal usa http://localhost:8765 automáticamente. Si Chrome pide permiso de red local, aceptalo y pulsá reintentar conexión.");
+          log(`Levantalo así:  ${AGENT_COMMAND}`);
+          $("repo-picker").hidden = true;
+          if (!$("src").value.trim()) $("src").value = EXAMPLE;
+        }
+      }
+
+      async function loadRepoFiles() {
+        try {
+          const { files } = await agent.files();
+          const select = $("archivos-repo");
+          select.innerHTML = '<option value="">(elige uno)</option>';
+          for (const path of files) {
+            const option = document.createElement("option");
+            option.value = path;
+            option.textContent = path;
+            select.append(option);
+          }
+          $("repo-picker").hidden = false;
+        } catch (error) {
+          log(`No pude listar los archivos del repo: ${error.message}`);
+        }
+      }
+
+      async function loadDefaultSketch() {
+        if ($("src").value.trim()) return;
+        try {
+          const result = await agent.read("DigisparkMouse/DigisparkMouse.ino");
+          $("src").value = result.source;
+          $("sketch-name").value = "DigisparkMouse";
+          $("save-path").value = result.path;
+          refreshGutter();
+          log(`Abierto ${result.path} desde el repo.`);
+        } catch {
+          $("src").value = EXAMPLE;
+          refreshGutter();
+          log("Ejemplo mínimo cargado (no pude leer el sketch del repo).");
+        }
+      }
+
+      /* ------------------------------- compilar -------------------------------- */
+
+      function setBusy(value) {
+        state.busy = value;
+        for (const id of ["btn-compilar", "btn-guardar", "btn-grabar", "btn-conectar", "btn-reintentar", "btn-grabar-local"]) {
+          const element = $(id);
+          if (element) element.disabled = value;
+        }
+      }
+
+      /**
+       * Graba con arduino-cli a través del agente local: sin WebUSB.
+       *
+       * El agente se queda esperando a que la placa aparezca en modo bootloader,
+       * así que el orden que funciona es pulsar y RECIÉN enchufar la placa.
+       */
+      async function flashLocal() {
+        if (state.busy) return;
+        const source = $("src").value;
+        if (!source.trim()) {
+          log("El código está vacío.");
+          return;
+        }
+        const name = $("sketch-name").value.trim();
+        if (!NAME_RE.test(name)) {
+          log("Nombre inválido: no se puede grabar sin un nombre de sketch válido.");
+          return;
+        }
+
+        const estado = $("grabar-local-estado");
+        setBusy(true);
+        estado.className = "note warn";
+        estado.textContent = "Compilando y esperando la placa… reenchufala ahora (el bootloader sólo escucha ~5 s).";
+        log("Grabando con arduino-cli desde la máquina: reenchufá la placa ahora.");
+        try {
+          const result = await agent.flash({ source, name, fqbn: board().fqbn, files: [] });
+          if (result?.log) log(result.log);
+          if (result?.ok) {
+            estado.className = "note ok";
+            estado.textContent = `Grabado en la placa: ${result.bytes} bytes. Ya está corriendo.`;
+            log("Grabado desde la máquina. La placa se reenumera como el firmware nuevo.");
+          } else {
+            estado.className = "note error";
+            estado.textContent = result?.error ?? "No se pudo grabar.";
+            log(`ERROR al grabar: ${result?.error ?? "sin detalle"}`);
+          }
+        } catch (error) {
+          const message = error instanceof AgentError ? error.message : String(error);
+          estado.className = "note error";
+          estado.textContent = message;
+          log(`ERROR al grabar: ${message}`);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function compile() {
+        if (state.busy) return;
+        const name = $("sketch-name").value.trim();
+        if (!NAME_RE.test(name)) {
+          log("Nombre inválido: tiene que empezar con letra y usar sólo letras, dígitos y _ (máx. 63).");
+          return;
+        }
+        const source = $("src").value;
+        if (!source.trim()) {
+          log("El código está vacío.");
+          return;
+        }
+
+        setBusy(true);
+        $("build-resumen").className = "note";
+        $("build-resumen").textContent = "Compilando con el agente local…";
+        log(`Compilando ${name}.ino para ${board().fqbn}…`);
+        try {
+          const result = await agent.compile({ source, name, fqbn: board().fqbn, files: [] });
+          renderBuild(result);
+        } catch (error) {
+          const message = error instanceof AgentError ? error.message : String(error);
+          $("build-resumen").className = "note error";
+          $("build-resumen").textContent = "No se pudo compilar.";
+          state.compiled = null;
+          renderLint(null);
+          log(`ERROR: ${message}`);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      function renderBuild(result) {
+        const summary = summarizeBuild(result ?? {});
+        const sizes = result?.sizes ?? {};
+        const used = sizes.flash ?? result?.bytes ?? 0;
+        const budget = sizes.maximum ?? board().maximumSize ?? 6012;
+        const ram = sizes.ram;
+
+        const percent = usagePercent(used, budget);
+        $("build-resumen").className = `note ${result?.ok ? "ok" : "error"}`;
+        $("build-resumen").textContent = result?.ok
+          ? `Compilado: ${used} bytes de ${budget} (${percent}%).`
+          : "La compilación falló.";
+        $("flash-fill").style.width = `${percent}%`;
+        $("flash-bar").classList.toggle("over", used > budget);
+
+        renderKv($("build-kv"), [
+          ["Flash usada", `${used} / ${budget} bytes (${percent}%)`],
+          ["RAM global", ram !== null && ram !== undefined ? `${ram} / ${ATTINY85_RAM} bytes` : null],
+          ["Placa", board().name ?? board().fqbn],
+          ["exit code", result?.exitCode],
+          ["Archivos", (result?.files ?? []).join(", ")],
+        ]);
+
+        const list = $("build-findings");
+        list.innerHTML = "";
+        for (const [level, text] of [...summary.errors.map((t) => ["error", t]), ...summary.warnings.map((t) => ["warn", t])].slice(0, 60)) {
+          const item = document.createElement("li");
+          item.className = level;
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.textContent = level;
+          const body = document.createElement("span");
+          body.textContent = text;
+          item.append(tag, body);
+          list.append(item);
+        }
+
+        if (result?.ok && result.hex) {
+          state.compiled = { hex: result.hex, image: parseIntelHex(result.hex).image };
+          $("hex").textContent = result.hex;
+          $("btn-descargar-hex").disabled = false;
+          $("btn-descargar-bin").disabled = false;
+          log(`OK: ${used} bytes de imagen (${percent}% del espacio de usuario).`);
+        } else {
+          state.compiled = null;
+          $("hex").textContent = "La compilación falló.";
+          $("btn-descargar-hex").disabled = true;
+          $("btn-descargar-bin").disabled = true;
+          log(result?.error ? `La compilación falló: ${result.error}` : "La compilación falló.");
+        }
+        renderLint(state.compiled?.image ?? null);
+      }
+
+      function renderLint(image) {
+        const list = $("lint-findings");
+        list.innerHTML = "";
+        if (!image) {
+          list.innerHTML = '<li class="info"><span class="tag">…</span><span>Compilá para validar el firmware.</span></li>';
+          return;
+        }
+        const check = checkFlashImage(image, board());
+        const items = check.findings.length
+          ? check.findings
+          : [{ level: "info", message: `Vector de reset ${check.vector?.text ?? "válido"} y ${check.used} bytes dentro del límite.` }];
+        for (const finding of items) {
+          const item = document.createElement("li");
+          item.className = finding.level;
+          const tag = document.createElement("span");
+          tag.className = "tag";
+          tag.textContent = finding.level;
+          const body = document.createElement("span");
+          body.textContent = finding.message;
+          item.append(tag, body);
+          list.append(item);
+        }
+      }
+
+      /* ------------------------------- guardar -------------------------------- */
+
+      async function save() {
+        const path = $("save-path").value.trim();
+        if (!path) {
+          log("Indicá una ruta dentro del repo para guardar.");
+          return;
+        }
+        try {
+          const result = await agent.save({ path, source: $("src").value });
+          log(`Guardado ${result.path} (backup: ${result.backup}).`);
+        } catch (error) {
+          log(`ERROR al guardar: ${error instanceof AgentError ? error.message : error}`);
+        }
+      }
+
+      /* ------------------------------- grabación ------------------------------ */
+
+      function renderDevice(info) {
+        if (!info) {
+          renderKv($("device-kv"), []);
+          return;
+        }
+        renderKv($("device-kv"), [
+          ["Bootloader", `micronucleus ${info.major}.${info.minor}`],
+          ["Flash de usuario", `${info.flashSize} bytes`],
+          ["Página", `${info.pageSize} bytes`],
+          ["Páginas", info.pages],
+          ["Delay de escritura", `${info.writeDelay} ms`],
+          ["Delay de borrado", `${Math.round(info.eraseDelay)} ms`],
+          ["Firma", info.signature ? info.signature.map((b) => b.toString(16).padStart(2, "0")).join(" ") : ""],
+        ]);
+      }
+
+      async function connect() {
+        try {
+          renderDevice(await flasher.requestDevice());
+          log("Placa conectada en modo bootloader.");
+        } catch (error) {
+          log(`ERROR al conectar: ${error.message}`);
+        }
+      }
+
+      async function flash() {
+        const image = state.compiled?.image;
+        if (!image) {
+          log("No hay firmware compilado: pulsá Compilar primero.");
+          return;
+        }
+        const check = checkFlashImage(image, board());
+        if (!check.ok) {
+          log(`No grabo: ${check.findings.filter((f) => f.level === "error").map((f) => f.message).join(" ")}`);
+          return;
+        }
+        setBusy(true);
+        try {
+          if (!flasher.connected) renderDevice(await flasher.requestDevice());
+          await flasher.flash(image, {
+            protocol: $("protocolo").value,
+            onProgress: (p) => {
+              const etiqueta = FASE_ETIQUETAS[p?.phase] ?? p?.phase ?? "Grabando";
+              const detalle = p?.phase === "writing" && p.escrito && p.total
+                ? ` (página ${p.pagina}/${p.paginas}, ${(p.escrito / 1024).toFixed(1)} de ${(p.total / 1024).toFixed(1)} KB)`
+                : "";
+              log(`${etiqueta}${detalle} — ${p.percentage}%`);
+            },
+          });
+          log("Grabado y arrancado.");
+        } catch (error) {
+          await flasher.close();
+          renderDevice(null);
+          log(`ERROR al grabar: ${error.message}`);
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      /* --------------------------------- arranque ----------------------------- */
+
+      function wire() {
+        $("src").addEventListener("input", refreshGutter);
+        $("src").addEventListener("scroll", () => { $("gutter-pre").style.transform = `translateY(${-$("src").scrollTop}px)`; });
+        $("src").addEventListener("keydown", (event) => {
+          if (event.key === "Tab") {
+            event.preventDefault();
+            const source = $("src");
+            source.setRangeText("  ", source.selectionStart, source.selectionEnd, "end");
+            refreshGutter();
+            return;
+          }
+          if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+            event.preventDefault();
+            compile();
+          }
+        });
+
+        $("placa").addEventListener("change", () => {
+          state.board = state.boards.find((item) => item.fqbn === $("placa").value) ?? state.board;
+          log(`Placa: ${state.board?.name ?? state.board?.fqbn}`);
+          renderLint(state.compiled?.image ?? null);
+        });
+        $("btn-compilar").addEventListener("click", compile);
+        $("btn-guardar").addEventListener("click", save);
+        $("btn-conectar").addEventListener("click", connect);
+        $("btn-grabar").addEventListener("click", flash);
+        $("btn-grabar-local").addEventListener("click", flashLocal);
+
+        // La cinta del hero se anima hasta -50%, así que los ítems tienen que
+        // estar exactamente duplicados: clonarlos garantiza que coincidan.
+        const cinta = $("hero-cinta");
+        if (cinta) cinta.append(...[...cinta.children].map((item) => item.cloneNode(true)));
+        $("btn-reintentar").addEventListener("click", () => { log("Reintentando conexión con el agente…"); pingAgent(); });
+
+        $("btn-descargar-hex").addEventListener("click", () => {
+          const hex = state.compiled?.hex;
+          if (!hex) return;
+          const name = `${$("sketch-name").value.trim() || "Sketch"}.ino.hex`;
+          download(name, hex, "text/plain");
+          log(`${name} descargado (${state.compiled.image.length} bytes).`);
+        });
+        $("btn-descargar-bin").addEventListener("click", () => {
+          const image = state.compiled?.image;
+          if (!image) return;
+          const name = `${$("sketch-name").value.trim() || "Sketch"}.ino.bin`;
+          download(name, image, "application/octet-stream");
+          log(`${name} descargado (${image.length} bytes).`);
+        });
+
+        $("archivos-repo").addEventListener("change", async (event) => {
+          const path = event.target.value;
+          if (!path) return;
+          try {
+            const result = await agent.read(path);
+            $("src").value = result.source;
+            $("save-path").value = result.path;
+            const base = path.split("/").pop().replace(/\.[^.]+$/, "");
+            if (NAME_RE.test(base)) $("sketch-name").value = base;
+            refreshGutter();
+            log(`Abierto ${result.path} (${result.source.length} bytes).`);
+          } catch (error) {
+            log(`ERROR al abrir ${path}: ${error.message}`);
+          }
+        });
+      }
+
+      wire();
+      fillBoards(state.boards);
+      $("agent-url").textContent = agent.baseUrl;
+      $("agent-command").textContent = `${AGENT_COMMAND}${new URL(agent.baseUrl).port ? ` --port ${new URL(agent.baseUrl).port}` : ""}`;
+      refreshGutter();
+      log("Worker Editor listo. Buscando el agente local…");
+      await pingAgent();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,39 @@
+name: Publicar el sitio
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Deja terminar el despliegue en curso antes de lanzar otro.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - name: Traer el repositorio
+        uses: actions/checkout@v7
+
+      - name: Preparar Pages
+        uses: actions/configure-pages@v6
+
+      - name: Empaquetar el sitio
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: .
+
+      - name: Publicar
+        id: despliegue
+        uses: actions/deploy-pages@v5
+
